@@ -1,3 +1,6 @@
+# Tests folder
+tests/
+
 # Compiled object files
 *.slo
 *.lo

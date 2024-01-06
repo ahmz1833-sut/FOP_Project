@@ -2,6 +2,8 @@
 
 int main(int argc, char const *argv[])
 {
-    printf("salam\n");
+    int i = 0;
+    scanf("%d", &i);
+    printf("salam %d\n", i);
     return 0;
 }

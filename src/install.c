@@ -1,6 +1,6 @@
 #include "install.h"
 
-int promptInstallation(const char* srcAddress)
+int promptInstallation(constString srcAddress)
 {
     if(!IS_INSTALLED()) // First Installation
     {
@@ -43,65 +43,17 @@ int promptUninstallation()
             int res = REMOVE_NEOGIT();
             if(res != 0) perror(_SGR_REDF _SGR_BOLD "Error while removing NeoGIT!\n\n" _SGR_RESET);
             else printf(_SGR_GREENF _SGR_BOLD "Removed Successfully!\n\n" _SGR_RESET);
-            exit(res);
+            return res;
         }
         else
             printf(_SGR_BLUEF "Operation Cancelled\n\n" _SGR_RESET);
     }
     else printf(_SGR_YELLOWF "NeoGIT was not installed!\n\n" _SGR_RESET);
 
-    exit(2);
+    return -1;
 }
 
-#ifdef _WIN32 // For Windows
-
-int __install_neogit_win32(const char* source)
-{
-    // Upgrade
-    if(IS_INSTALLED()) REMOVE_NEOGIT();
-
-    char __directoryPath[200];
-    char* ptr = strrchr(source, '\\');
-    if (ptr != NULL)
-    {
-        uint len = (ptr - source);
-        sprintf(__directoryPath, "%s", source);
-        __directoryPath[len] = '\\';
-        __directoryPath[len + 1] = '\0';
-    }
-    else strcpy(__directoryPath, ".\\");
-
-    char _prompt[300];
-    sprintf(_prompt, "cd \"%s\"", __directoryPath);
-    if(system(_prompt) != 0) return -1;
-    *(strstr(_prompt, ":\\")+1) = '\0';
-    if(system(_prompt+3) != 0) return -1;
-    if(system("Echo Set UAC = CreateObject^(\"Shell.Application\"^) > _tmp.vbs") != 0) return -1;
-    sprintf(_prompt, "Echo UAC.ShellExecute \"cmd\", \"/c copy \" ^& Chr(34) ^& \"%s" PROGRAM_NAME ".exe\" ^& Chr(34) ^& \" " PROGRAM_PATH " \", \"\", \"runas\", 1 >> _tmp.vbs", __directoryPath);
-    if(system(_prompt) != 0) return -1;
-    if(system("cscript _tmp.vbs >nul 2>&1") != 0) return -1;
-    remove("_tmp.vbs");
-    sleep(1);
-    return IS_INSTALLED() ? 0 : -1;
-}
-
-int __remove_neogit_win32()
-{
-    if(IS_INSTALLED())
-    {
-        if(system("Echo Set UAC = CreateObject^(\"Shell.Application\"^) > _tmp.vbs") != 0) return -1;
-        if(system("Echo UAC.ShellExecute \"cmd\", \"/c del " PROGRAM_PATH "\", \"\", \"runas\", 1 >> _tmp.vbs")) return -1;
-        if(system("cscript _tmp.vbs >nul 2>&1") != 0) return -1;
-        system("del _tmp.vbs >nul 2>&1");
-        sleep(1);
-        return IS_INSTALLED() ? -1 : 0;
-    }
-    return 0;
-}
-
-#else // For Linux
-
-int __install_neogit_linux(const char* source)
+int __install_neogit_linux(constString source)
 {
     // Upgrade
     if(IS_INSTALLED()) REMOVE_NEOGIT();
@@ -130,5 +82,3 @@ int __remove_neogit_linux()
     if(system("sudo rm " PROGRAM_PATH " >/dev/null 2>&1")) return -1;
     return IS_INSTALLED() ? -1 : 0;
 }
-
-#endif

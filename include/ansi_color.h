@@ -1,11 +1,6 @@
 #ifndef __ANSI_COLOR_H__
 #define __ANSI_COLOR_H__
 
-#include <stdio.h>
-#ifdef _WIN32
-    #include <windows.h>
-#endif
-
 #define _SGR_RESET      "\e[m"
 
 #define _SGR_BOLD       "\e[1m"
@@ -49,7 +44,5 @@
 
 #define _SAVE_CURSOR    "\e[s"
 #define _REST_CURSOR    "\e[u"
-
-void prepareANSI(void);
 
 #endif

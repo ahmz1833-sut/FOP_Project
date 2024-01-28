@@ -2,11 +2,12 @@
 
 bool isEmpty(constString s)
 {
-    if(!s) return true;             // If the String is null, return true
-    String ss = strtrim(strDup(s)); // Trim leading and trailing whitespaces
-    uint len = strlen(ss);          // Get the length of the trimmed string
-    free(ss);                       // Free the memory allocated for the trimmed string
-    return (len == 0);              // Return true if the trimmed string is empty, false otherwise
+    if (!s)
+        return true; // If the String is null, return true
+    uint len = 0;
+    withString(ss, strtrim(strDup(s))) // Trim leading and trailing whitespaces
+        len = strlen(ss);        // Get the length of the trimmed string
+    return (len == 0);           // Return true if the trimmed string is empty, false otherwise
 }
 
 String strReplace(String str, char find, char replace)
@@ -103,7 +104,8 @@ uint tokenizeString(String str, constString delim, String *destArray)
 
 String strDup(constString src)
 {
-    if(src == NULL) return strDup("(null)");
+    if (src == NULL)
+        return strDup("(null)");
     String dest = malloc(strlen(src) + 1);
     strcpy(dest, src);
     return dest;
@@ -140,48 +142,49 @@ bool isMatch(constString _text, constString _pattern)
     if (_text == NULL || _pattern == NULL)
         return false;
 
-    String text = strtrim(strDup(_text));
-    String pattern = strtrim(strDup(_pattern));
-
-    int n = strlen(text);
-    int m = strlen(pattern);
-    int i = 0, j = 0, startIndex = -1, match = 0;
-
-    while (i < n)
+    int i = 0, j = 0, n = 0, m = 0;
+    withString(text, strtrim(strDup(_text)))
     {
-        if (j < m && (pattern[j] == '?' || pattern[j] == text[i]))
+        withString(pattern, strtrim(strDup(_pattern)))
         {
-            // Characters match or '?' in pattern matches any character.
-            i++;
-            j++;
-        }
-        else if (j < m && pattern[j] == '*')
-        {
-            // Wildcard character '*', mark the current position in the pattern and the text as a proper match.
-            startIndex = j;
-            match = i;
-            j++;
-        }
-        else if (startIndex != -1)
-        {
-            // No match, but a previous wildcard was found. Backtrack to the last '*' character position and try for a different match.
-            j = startIndex + 1;
-            match++;
-            i = match;
-        }
-        else
-        {
-            // If none of the above cases comply, the pattern does not match.
-            return false;
+            n = strlen(text);
+            m = strlen(pattern);
+            int startIndex = -1, match = 0;
+
+            while (i < n)
+            {
+                if (j < m && (pattern[j] == '?' || pattern[j] == text[i]))
+                {
+                    // Characters match or '?' in pattern matches any character.
+                    i++;
+                    j++;
+                }
+                else if (j < m && pattern[j] == '*')
+                {
+                    // Wildcard character '*', mark the current position in the pattern and the text as a proper match.
+                    startIndex = j;
+                    match = i;
+                    j++;
+                }
+                else if (startIndex != -1)
+                {
+                    // No match, but a previous wildcard was found. Backtrack to the last '*' character position and try for a different match.
+                    j = startIndex + 1;
+                    match++;
+                    i = match;
+                }
+                else
+                {
+                    // If none of the above cases comply, the pattern does not match.
+                    return false;
+                }
+            }
+
+            // Consume any remaining '*' characters in the given pattern.
+            while (j < m && pattern[j] == '*')
+                j++;
         }
     }
-
-    // Consume any remaining '*' characters in the given pattern.
-    while (j < m && pattern[j] == '*')
-        j++;
-
-    free(pattern);
-    free(text);
 
     // If we have reached the end of both the pattern and the text, the pattern matches the text.
     return j == m;

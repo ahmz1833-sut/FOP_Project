@@ -3,26 +3,26 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <unistd.h>
 #include <dirent.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <linux/limits.h>
-#include <glob.h>
-#include "datatypes.h"
+#include "common.h"
 #include "string_funcs.h"
-#include "errors.h"
 
 typedef struct
 {
-	String name;
-	String parent;
+	String path;
 	size_t fileSize;
 	time_t dateModif;
 	uint permission : 9;
 	unsigned isDir : 1;
 	unsigned isLink : 1;
-} Entry;
+} FileEntry;
+
+#define getFileName(path) (strrchr(path, '/') ? strrchr(path, '/') + 1 : path)
 
 /**
  * @brief Move the file cursor to a specific line number
@@ -41,7 +41,7 @@ typedef struct
 	({                                                   \
 		rewind(f);                                       \
 		int _k = 0;                                      \
-		for (int _i = 0, _c = 0; _i < n - 1; _i++, _k++)       \
+		for (int _i = 0, _c = 0; _i < n - 1; _i++, _k++) \
 			while ((_c = fgetc(f)) != EOF && _c != '\n') \
 				_k++;                                    \
 		_k;                                              \
@@ -83,7 +83,6 @@ typedef struct
  *         ERR_NOERR is returned for success, while ERR_FILE_ERROR indicates an error.
  */
 int fileMemMove(FILE *file, long source, long destination, size_t size);
-
 
 /**
  * @brief Replace a line in a file with new content
@@ -153,15 +152,17 @@ int insertLine(FILE *file, int lineNumber, constString newContent);
  */
 String normalizePath(constString _path, constString _repoPath);
 
+FileEntry getFileEntry(constString _path, constString _repopath);
+
 /**
  * @brief List entries in a directory and retrieve information about them
  *
  * The ls function lists entries in a specified directory and retrieves information about each entry.
- * It returns an array of Entry structures containing details such as name, parent directory, file size,
+ * It returns an array of FileEntry structures containing details such as name, parent directory, file size,
  * modification date, whether it's a directory or a symbolic link, and permissions. The function also
  * returns the total count of entries in the specified directory.
  *
- * @param buf A pointer to an array of Entry structures to store information about directory entries
+ * @param buf A pointer to an array of FileEntry structures to store information about directory entries
  * @param _path The path of the directory to list entries
  *
  * Example:
@@ -171,7 +172,10 @@ String normalizePath(constString _path, constString _repoPath);
  *
  * @return The total count of entries retrieved and stored in the 'buf' array. Returns -1 if an error
  *         occurs, such as the specified directory not existing or being inaccessible.
+ * 			if the input path is a file, returns -2.
  */
-int ls(Entry **buf, constString path);
+int ls(FileEntry **buf, constString path);
+
+void freeFileEntry(FileEntry *array, uint len);
 
 #endif

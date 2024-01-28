@@ -1,7 +1,7 @@
 #ifndef __PHASE_1_H__
 #define __PHASE_1_H__
 
-#include "header.h"
+#include "neogit.h"
 
 int command_init(int argc, constString argv[], bool performActions);
 #define CMD_INIT_USAGE ""
@@ -24,46 +24,36 @@ int command_init(int argc, constString argv[], bool performActions);
  * - Various error codes for specific failures during set or remove operations.
  */
 int command_config(int argc, constString argv[], bool performActions);
-#define CMD_CONFIG_USAGE "Set a config: " _SGR_BOLD "neogit config [--global] <key> <value>\n" _SGR_NORM \
-						 "Remove a config : " _SGR_BOLD "neogit config [--global] -R <key>\n" _SGR_NORM  \
+#define CMD_CONFIG_USAGE "Set a config: " _BOLD "neogit config [--global] <key> <value>\n" _UNBOLD \
+						 "Remove a config : " _BOLD "neogit config [--global] -R <key>\n" _UNBOLD  \
 						 "Valid keys are : user.* / alias.*"
-
 
 int command_add(int argc, constString argv[], bool performActions);
 #define CMD_ADD_USAGE ""
 
-
 int command_reset(int argc, constString argv[], bool performActions);
 #define CMD_RESET_USAGE ""
-
 
 int command_status(int argc, constString argv[], bool performActions);
 #define CMD_STATUS_USAGE ""
 
-
 int command_commit(int argc, constString argv[], bool performActions);
 #define CMD_COMMIT_USAGE ""
-
 
 int command_set(int argc, constString argv[], bool performActions);
 #define CMD_SET_USAGE ""
 
-
 int command_replace(int argc, constString argv[], bool performActions);
 #define CMD_REPLACE_USAGE ""
-
 
 int command_remove(int argc, constString argv[], bool performActions);
 #define CMD_REMOVE_USAGE ""
 
-
 int command_log(int argc, constString argv[], bool performActions);
 #define CMD_LOG_USAGE ""
 
-
 int command_branch(int argc, constString argv[], bool performActions);
 #define CMD_BRANCH_USAGE ""
-
 
 int command_checkout(int argc, constString argv[], bool performActions);
 #define CMD_CHECKOUT_USAGE ""

@@ -1,7 +1,7 @@
 #ifndef __PHASE_2_H__
 #define __PHASE_2_H__
 
-#include "header.h"
+#include "neogit.h"
 
 #define CMD_REVERT_USAGE ""
 #define CMD_TAG_USAGE ""

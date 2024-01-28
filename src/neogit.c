@@ -1,46 +1,46 @@
-#include "header.h"
+#include "neogit.h"
 
-// Global variable for cwd (Used in other c files)
+// Global variable for cwd (Used in other c files - valued in begining of main())
 String curWorkingDir = NULL;
-// Global variable for current repository (Used in other c files)
+// Global variable for current repository (Used in other c files - valued in begining of main())
 String curRepoPath = NULL;
 
 String obtainRepository(constString workDir)
 {
-    // Push current working directory into temp variable
-    String tmpWorkDir = getcwd(NULL, PATH_MAX);
-    // Declare variable to store the repository path
-    String repoPath = NULL;
+	// Declare variable to store the repository path
+	String repoPath = NULL;
 
-    // Change to the provided working directory
-    chdir(workDir);
+	// Push current working directory into temp variable
+	withString(tmpWorkDir, getcwd(NULL, PATH_MAX))
+	{
+		// Change to the provided working directory
+		chdir(workDir);
 
-    // Iterate over the directory entries and search for the repository
-    Entry *buf = NULL;
-    int count = 0;
-    bool found = false;
-    while ((count = ls(&buf, ".")) > 0)
-    {
-        for (int i = 0; i < count; i++)
-            if (buf[i].isDir && isMatch(buf[i].name, "." PROGRAM_NAME))
-            {
-                repoPath = buf[i].parent;
-                found = true;
-                break;
-            }
-        free(buf);
+		// Iterate over the directory entries and search for the repository
+		FileEntry *buf = NULL;
+		int count = 0;
+		bool found = false;
+		while ((count = ls(&buf, ".")) > 0)
+		{
+			for (int i = 0; i < count; i++)
+				if (buf[i].isDir && isMatch(getFileName(buf[i].path), "." PROGRAM_NAME))
+				{
+					repoPath = getcwd(NULL, PATH_MAX);
+					found = true;
+					break;
+				}
+			freeFileEntry(buf, count);
+			free(buf);
 
-        // Navigate to the parent directory
-        String tmp = getcwd(NULL, PATH_MAX);
+			// If we reach root, or error in navigating to parent, break loop;
+			if (isMatch(getcwd(NULL, PATH_MAX), "/") || chdir("..") != 0)
+				break;
+		}
 
-        // If we reach root, or error in navigating to parent, break loop;
-        if (isMatch(tmp, "/") || chdir("..") != 0)
-            break;
-    }
-    // Change back to the original working directory (Pop from temp variable)
-    chdir(tmpWorkDir);
-    free(tmpWorkDir);
-    return repoPath;
+		// Change back to the original working directory (Pop from temp variable)
+		chdir(tmpWorkDir);
+	}
+	return repoPath;
 }
 
 /**
@@ -62,27 +62,27 @@ String obtainRepository(constString workDir)
  */
 String ـgetconfigpath(bool global)
 {
-    String configPath;
+	String configPath;
 
-    // Check if the configuration should be global or repository-specific
-    if (global)
-    {
-        // Generate the global configuration path in the user's home directory
-        configPath = strConcat(getenv("HOME"), "/." PROGRAM_NAME "config");
-        // Ensure the file exists by creating an empty file
-        system("touch ~/." PROGRAM_NAME "config");
-    }
-    else
-    {
-        // Generate the repository-specific configuration path
-        configPath = strConcat(curRepoPath, "/." PROGRAM_NAME "/config");
-        char cmd[PATH_MAX];
-        // Ensure the file exists by creating an empty file
-        sprintf(cmd, "touch %s", configPath);
-        system(cmd);
-    }
+	// Check if the configuration should be global or repository-specific
+	if (global)
+	{
+		// Generate the global configuration path in the user's home directory
+		configPath = strConcat(getenv("HOME"), "/." PROGRAM_NAME "config");
+		// Ensure the file exists by creating an empty file
+		system("touch ~/." PROGRAM_NAME "config");
+	}
+	else
+	{
+		// Generate the repository-specific configuration path
+		configPath = strConcat(curRepoPath, "/." PROGRAM_NAME "/config");
+		char cmd[PATH_MAX];
+		// Ensure the file exists by creating an empty file
+		sprintf(cmd, "touch \"%s\"", configPath);
+		system(cmd);
+	}
 
-    return configPath;
+	return configPath;
 }
 
 /**
@@ -105,195 +105,185 @@ String ـgetconfigpath(bool global)
  */
 time_t _loadconfig(constString key, String valueDest, bool global)
 {
-    // Obtain the path of the configuration file
-    String configPath = ـgetconfigpath(global);
+	time_t configTime = 0;
 
-    // Open the configuration file for reading
-    FILE *configFile = fopen(configPath, "rb");
-    free(configPath);
+	// Obtain the path of the configuration file and Open the configuration file for reading
+	tryWithString(configPath, ـgetconfigpath(global), ({ return 0; }), ({ return 0; }))
+	{
+		tryWithFile(configFile, configPath, throw(0), throw(0))
+		{
+			// Prepare the format string for reading the configuration line
+			String configFormat = strConcat("[", key, "]:%[^:]:%ld\n");
 
-    // Check if the file is opened successfully
-    if (configFile == NULL)
-        return 0;
+			// Create a wildcard pattern to match the key in the configuration file
+			String configWildcard = strConcat("[", key, "]:*:*");
 
-    // Prepare the format string for reading the configuration line
-    String configFormat = strConcat("[", key, "]:%[^:]:%ld\n");
+			// Read and parse the configuration file to find the specified key
+			char buf[STR_LINE_MAX];
+			uint lineNum;
+			for (lineNum = 1; fgets(buf, STR_LINE_MAX - 1, configFile) != 0; lineNum++)
+				if (isMatch(buf, configWildcard))
+				{
+					sscanf(buf, configFormat, valueDest, &configTime);
+					break;
+				}
 
-    // Create a wildcard pattern to match the key in the configuration file
-    String configWildcard = strConcat("[", key, "]:*:*");
+			// Free allocated memory and close the configuration file
+			free(configFormat);
+			free(configWildcard);
+		}
+	}
 
-    // Read and parse the configuration file to find the specified key
-    char buf[STR_LINE_MAX];
-    time_t configTime = 0;
-    uint lineNum;
-    for (lineNum = 1; fgets(buf, STR_LINE_MAX - 1, configFile) != 0; lineNum++)
-        if (isMatch(buf, configWildcard))
-        {
-            sscanf(buf, configFormat, valueDest, &configTime);
-            break;
-        }
-
-    // Free allocated memory and close the configuration file
-    free(configFormat);
-    free(configWildcard);
-    fclose(configFile);
-
-    return configTime;
+	return configTime;
 }
 
 int setConfig(constString key, constString value, time_t now, bool global)
 {
-    // Obtain the path of the configuration file
-    String configPath = ـgetconfigpath(global);
+	// Obtain the path of the configuration file and Open the configuration file
+	tryWithString(configPath, ـgetconfigpath(global), ({ return ERR_FILE_ERROR; }), ({ return _ERR; }))
+	{
+		tryWithFile(configFile, configPath, throw(ERR_FILE_ERROR), throw(_ERR))
+		{
+			// Prepare the format string and line content for the new configuration
+			String configFormat = strConcat("[", key, "]:%s:%ld\n");
+			String configLineString = malloc(STR_LINE_MAX);
+			sprintf(configLineString, configFormat, value, now);
 
-    // Open the configuration file for reading and writing
-    FILE *configFile = fopen(configPath, "rb+");
-    free(configPath);
+			// Create a wildcard pattern to match the key in the configuration file
+			String configWildcard = strConcat("[", key, "]:*:*");
 
-    // Check if the file is opened successfully
-    if (configFile == NULL)
-        return ERR_FILE_ERROR;
+			// Search for the line number where the key is located in the configuration file
+			char buf[STR_LINE_MAX];
+			uint lineNum;
+			for (lineNum = 1; fgets(buf, STR_LINE_MAX - 1, configFile) != 0; lineNum++)
+				if (isMatch(buf, configWildcard))
+					break;
 
-    // Prepare the format string and line content for the new configuration
-    String configFormat = strConcat("[", key, "]:%s:%ld\n");
-    String configLineString = malloc(STR_LINE_MAX);
-    sprintf(configLineString, configFormat, value, now);
+			// Replace or insert the configuration line at the identified line number
+			int res = replaceLine(configFile, lineNum, configLineString);
 
-    // Create a wildcard pattern to match the key in the configuration file
-    String configWildcard = strConcat("[", key, "]:*:*");
+			// Free allocated memory
+			free(configLineString);
+			free(configFormat);
+			free(configWildcard);
 
-    // Search for the line number where the key is located in the configuration file
-    char buf[STR_LINE_MAX];
-    uint lineNum;
-    for (lineNum = 1; fgets(buf, STR_LINE_MAX - 1, configFile) != 0; lineNum++)
-        if (isMatch(buf, configWildcard))
-            break;
-
-    // Replace or insert the configuration line at the identified line number
-    int res = replaceLine(configFile, lineNum, configLineString);
-
-    // Free allocated memory and close the configuration file
-    free(configLineString);
-    free(configFormat);
-    free(configWildcard);
-    fclose(configFile);
-
-    return res;
+			throw(res);
+		}
+	}
+	return ERR_NOERR;
 }
 
 String getConfig(constString key)
 {
-    char globalValue[STR_LINE_MAX] = {0};
-    time_t globalConfigSetTime = _loadconfig(key, globalValue, true);
+	char globalValue[STR_LINE_MAX] = {0};
+	time_t globalConfigSetTime = _loadconfig(key, globalValue, true);
 
-    if (!curRepoPath) // Repo not initialized
-        return strDup(globalValue);
+	if (!curRepoPath) // Repo not initialized
+		return *globalValue ? strDup(globalValue) : NULL;
 
-    char localValue[STR_LINE_MAX] = {0};
-    time_t localConfigSetTime = _loadconfig(key, localValue, false);
+	char localValue[STR_LINE_MAX] = {0};
+	time_t localConfigSetTime = _loadconfig(key, localValue, false);
 
-    /* If the local configuration is set and it's newer than the global one, use
-    the local version. Otherwise, use the global one */
-    if (!localConfigSetTime || (globalConfigSetTime && localConfigSetTime < globalConfigSetTime))
-        return *globalValue ? strDup(globalValue) : NULL;
-    else
-        return *localValue ? strDup(localValue) : NULL;
+	/* If the local configuration is set and it's newer than the global one, use
+	the local version. Otherwise, use the global one */
+	if (!localConfigSetTime || (globalConfigSetTime && localConfigSetTime < globalConfigSetTime))
+		return *globalValue ? strDup(globalValue) : NULL;
+	else
+		return *localValue ? strDup(localValue) : NULL;
 }
 
 int removeConfig(constString key, bool global)
 {
-    // Obtain the path of the configuration file
-    String configPath = ـgetconfigpath(global);
+	// Obtain the path of the configuration file and Open the configuration file
+	tryWithString(configPath, ـgetconfigpath(global), ({ return ERR_FILE_ERROR; }), ({ return _ERR; }))
+	{
+		tryWithFile(configFile, configPath, throw(ERR_FILE_ERROR), throw(_ERR))
+		{
+			// Prepare the format string for reading the configuration line
+			String configFormat = strConcat("[", key, "]:%[^:]:%ld\n");
 
-    // Open the configuration file for reading and writing
-    FILE *configFile = fopen(configPath, "rb+");
-    free(configPath);
+			// Create a wildcard pattern to match the key in the configuration file
+			String configWildcard = strConcat("[", key, "]:*:*");
 
-    // Check if the file is opened successfully
-    if (configFile == NULL)
-        return ERR_FILE_ERROR;
-    
-    // Prepare the format string for reading the configuration line
-    String configFormat = strConcat("[", key, "]:%[^:]:%ld\n");
+			// Read and parse the configuration file to find the specified key
+			char buf[STR_LINE_MAX];
+			uint lineNum;
+			bool found = false;
+			for (lineNum = 0; !found && (fgets(buf, STR_LINE_MAX - 1, configFile) != 0); lineNum++)
+				if (isMatch(buf, configWildcard))
+					found = true;
 
-    // Create a wildcard pattern to match the key in the configuration file
-    String configWildcard = strConcat("[", key, "]:*:*");
+			int res = found ? removeLine(configFile, lineNum) : ERR_CONFIG_NOTFOUND;
 
-    // Read and parse the configuration file to find the specified key
-    char buf[STR_LINE_MAX];
-    uint lineNum;
-    bool found = false;
-    for (lineNum = 0; !found && (fgets(buf, STR_LINE_MAX - 1, configFile) != 0); lineNum++)
-        if (isMatch(buf, configWildcard))
-            found = true;
+			// Free allocated memory and close the configuration file
+			free(configFormat);
+			free(configWildcard);
 
-    
-    int res = found ? removeLine(configFile, lineNum) : ERR_CONFIG_NOTFOUND;
-
-    // Free allocated memory and close the configuration file
-    free(configFormat);
-    free(configWildcard);
-    fclose(configFile);
-    return res;
+			throw(res);
+		}
+	}
 }
 
 int getAliases(String *keysDest)
 {
-    uint aliasLen = 0;
+	uint aliasLen = 0;
 
-    // The format for parsing alias configurations in the files
-    String configFormat = strConcat("[alias.%[^]]]:%[^:]:");
-    String configWildcard = strConcat("[alias.*]:*:*");
-    char buf[STR_LINE_MAX];
-    uint lineNum;
+	// The format for parsing alias configurations in the files
+	String configFormat = strConcat("[alias.%[^]]]:%[^:]:");
+	String configWildcard = strConcat("[alias.*]:*:*");
+	char buf[STR_LINE_MAX];
+	uint lineNum;
 
-    // Retrieve alias keys from the global configuration
-    String GconfigPath = ـgetconfigpath(true);
-    FILE *GconfigFile = fopen(GconfigPath, "rb");
-    free(GconfigPath);
-    if (GconfigFile)
-    {
-        for (lineNum = 1; fgets(buf, STR_LINE_MAX - 1, GconfigFile) != 0; lineNum++)
-            if (isMatch(buf, configWildcard))
-            {
-                char keyBuf[STR_LINE_MAX], cmdBuf[STR_LINE_MAX];
-                sscanf(buf, configFormat, keyBuf, cmdBuf);
-                bool found = false;
-                // Check for duplicate keys in the destination array
-                for (int i = 0; !found && i < aliasLen; i++)
-                    if (strcmp(keyBuf, keysDest[i]) == 0)
-                        found = true;
-                // If the key is not a duplicate, add it to the destination array
-                if (!found)
-                    keysDest[aliasLen++] = strDup(keyBuf);
-            }
-        fclose(GconfigFile);
-    }
+	// Retrieve alias keys from the global configuration
+	tryWithString(GconfigPath, ـgetconfigpath(true), {}, {})
+	{
+		tryWithFile(GconfigFile, GconfigPath, {}, {})
+		{
+			for (lineNum = 1; fgets(buf, STR_LINE_MAX - 1, GconfigFile) != 0; lineNum++)
+				if (isMatch(buf, configWildcard))
+				{
+					char keyBuf[STR_LINE_MAX], cmdBuf[STR_LINE_MAX];
+					sscanf(buf, configFormat, keyBuf, cmdBuf);
+					bool found = false;
+					// Check for duplicate keys in the destination array
+					for (int i = 0; !found && i < aliasLen; i++)
+						if (strcmp(keyBuf, keysDest[i]) == 0)
+							found = true;
+					// If the key is not a duplicate, add it to the destination array
+					if (!found)
+						keysDest[aliasLen++] = strDup(keyBuf);
+				}
+		}
+	}
 
-    // Retrieve alias keys from the local configuration if in a repository
-    if (curRepoPath)
-    {
-        String LconfigPath = ـgetconfigpath(false);
-        FILE *LconfigFile = fopen(LconfigPath, "rb");
-        free(LconfigPath);
-        if (LconfigFile)
-        {
-            for (lineNum = 1; LconfigFile && (fgets(buf, STR_LINE_MAX - 1, LconfigFile) != 0); lineNum++)
-                if (isMatch(buf, configWildcard))
-                {
-                    char keyBuf[STR_LINE_MAX], cmdBuf[STR_LINE_MAX];
-                    sscanf(buf, configFormat, keyBuf, cmdBuf);
-                    bool found = false;
-                    // Check for duplicate keys in the destination array
-                    for (int i = 0; !found && i < aliasLen; i++)
-                        if (strcmp(keyBuf, keysDest[i]) == 0)
-                            found = true;
-                    // If the key is not a duplicate, add it to the destination array
-                    if (!found)
-                        keysDest[aliasLen++] = strDup(keyBuf);
-                }
-            fclose(LconfigFile);
-        }
-    }
-    return aliasLen;
+	// Retrieve alias keys from the local configuration if in a repository
+	if (curRepoPath)
+	{
+		tryWithString(LconfigPath, ـgetconfigpath(false), {}, {})
+		{
+			tryWithFile(LconfigFile, LconfigPath, {}, {})
+			{
+				for (lineNum = 1; LconfigFile && (fgets(buf, STR_LINE_MAX - 1, LconfigFile) != 0); lineNum++)
+					if (isMatch(buf, configWildcard))
+					{
+						char keyBuf[STR_LINE_MAX], cmdBuf[STR_LINE_MAX];
+						sscanf(buf, configFormat, keyBuf, cmdBuf);
+						bool found = false;
+						// Check for duplicate keys in the destination array
+						for (int i = 0; !found && i < aliasLen; i++)
+							if (strcmp(keyBuf, keysDest[i]) == 0)
+								found = true;
+						// If the key is not a duplicate, add it to the destination array
+						if (!found)
+							keysDest[aliasLen++] = strDup(keyBuf);
+					}
+			}
+		}
+	}
+	return aliasLen;
+}
+
+bool isGitIgnore(FileEntry *entry)
+{
+	return entry->isDir && isMatch(getFileName(entry->path), ".git");
 }

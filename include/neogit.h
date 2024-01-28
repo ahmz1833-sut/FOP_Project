@@ -1,23 +1,22 @@
-#ifndef __HEADER_H__
-#define __HEADER_H__
+#ifndef __NEOGIT_H__
+#define __NEOGIT_H__
 
 #include <stdio.h>
 #include <stdlib.h>
-#include "datatypes.h"
+#include "common.h"
 #include "ansi_color.h"
 #include "string_funcs.h"
 #include "file_system.h"
-#include "errors.h"
 
 #define PROGRAM_NAME "neogit"
 
 typedef struct
 {
-    constString key;
-    uint minArgc;
-    uint maxArgc;
-    int (*function)(int, constString[], bool);
-    constString usageHelp;
+	constString key;
+	uint minArgc;
+	uint maxArgc;
+	int (*function)(int, constString[], bool);
+	constString usageHelp;
 } Command;
 
 #define checkArgument(num, cmd) (argc >= (num) + 1 && isMatch(argv[num], cmd))
@@ -31,19 +30,6 @@ typedef struct
 		__i ? __i - 1 : 0;                   \
 	})
 
-// Useful Macros for Debug :)
-#define _DEBUG_(...)                           \
-	printf("\n\tDEBUG (Line %d): ", __LINE__); \
-	printf(__VA_ARGS__)
-#define _DEBUG1_(x, fmt)                              \
-	printf("\n\tDEBUG (Line %d): %s=", __LINE__, #x); \
-	printf(fmt, x)
-#define _DEBUG2_(x, fmtx, y, fmty)                    \
-	printf("\n\tDEBUG (Line %d): %s=", __LINE__, #x); \
-	printf(fmtx, x);                                  \
-	printf(" / %s=", #y);                             \
-	printf(fmty, y);
-
 /**
  * @brief Process and execute a command or check the command syntax.
  *
@@ -52,7 +38,7 @@ typedef struct
  * the corresponding function or displays an error message.
  *
  * # Note : This function declared in main.c
- * 
+ *
  * @param argc The number of command-line arguments.
  * @param argv An array of command-line argument strings.
  * @param performActions A boolean indicating whether to perform actions or only check the syntax.
@@ -138,6 +124,8 @@ int removeConfig(constString key, bool global);
  *
  * @return The total number of unique alias keys found. If an error occurs or no alias keys are found, 0 is returned.
  */
-int getAliases(String* keysDest);
+int getAliases(String *keysDest);
+
+bool isGitIgnore(FileEntry *entry);
 
 #endif

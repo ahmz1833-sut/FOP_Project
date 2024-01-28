@@ -4,29 +4,29 @@ int promptInstallation(constString srcAddress)
 {
     if(!IS_INSTALLED()) // First Installation
     {
-        printf(_SGR_YELLOWF "The NeoGIT is not found in PATH for launching commands!\n");
-        printf(_SGR_DEF_FG _SGR_BOLD "Do you want to install NeoGIT in a system folder in PATH? (Y/N): ");
+        printf(_YEL "The NeoGIT is not found in PATH for launching commands!\n");
+        printf(_DFCOLOR _BOLD "Do you want to install NeoGIT in a system folder in PATH? (Y/N): ");
     }
     else // Upgrade
     {
-        printf(_SGR_YELLOWF "The NeoGIT is already installed in your system!\n");
-        printf(_SGR_DEF_FG _SGR_BOLD "Do you want to upgrade NeoGIT ? (Y/N): ");
+        printf(_YEL "The NeoGIT is already installed in your system!\n");
+        printf(_DFCOLOR _BOLD "Do you want to upgrade NeoGIT ? (Y/N): ");
     }    
 
     char result;
     scanf("%1[YNyn]", &result);
-    printf(_SGR_RESET);
+    printf(_RST);
 
     if(toupper(result) == 'Y')
     {
         printf("\nInstalling NeoGIT in " PROGRAM_PATH " ...\n");
         int res = INSTALL_NEOGIT(srcAddress);
-        if(res != 0) perror(_SGR_REDF _SGR_BOLD "Failed to install\n\n" _SGR_RESET);
-        else printf(_SGR_GREENF _SGR_BOLD "Successfully installed\n\n" _SGR_RESET);
+        if(res != 0) perror(_REDB "Failed to install\n\n" _RST);
+        else printf(_GRNB "Successfully installed\n\n" _RST);
         return res;
     }
     else 
-        printf(_SGR_BLUEF "Installation Cancelled\n\n" _SGR_RESET);
+        printf(_BLU "Installation Cancelled\n\n" _RST);
     return -1;
 }
 
@@ -34,21 +34,21 @@ int promptUninstallation()
 {
     if(IS_INSTALLED())
     {
-        printf(_SGR_BOLD _SGR_YELLOWF "NeoGIT found in PATH! Are you sure to remove it? (Y/N): " _SGR_RESET);
+        printf(_BOLD _YEL "NeoGIT found in PATH! Are you sure to remove it? (Y/N): " _RST);
         char result;
         scanf("%1[YNyn]", &result);
         if(toupper(result) == 'Y')
         {
             printf("\nRemoving NeoGIT ...\n");
             int res = REMOVE_NEOGIT();
-            if(res != 0) perror(_SGR_REDF _SGR_BOLD "Error while removing NeoGIT!\n\n" _SGR_RESET);
-            else printf(_SGR_GREENF _SGR_BOLD "Removed Successfully!\n\n" _SGR_RESET);
+            if(res != 0) perror(_REDB "Error while removing NeoGIT!\n\n" _RST);
+            else printf(_GRNB "Removed Successfully!\n\n" _RST);
             return res;
         }
         else
-            printf(_SGR_BLUEF "Operation Cancelled\n\n" _SGR_RESET);
+            printf(_BLU "Operation Cancelled\n\n" _RST);
     }
-    else printf(_SGR_YELLOWF "NeoGIT was not installed!\n\n" _SGR_RESET);
+    else printf(_YEL "NeoGIT was not installed!\n\n" _RST);
 
     return -1;
 }

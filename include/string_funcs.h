@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <stdarg.h>
-#include "datatypes.h"
+#include "common.h"
 
 /**
  * @brief Check if a string contains '*' or '?'
@@ -38,7 +38,7 @@
  * @return A newly allocated string containing the concatenated result. The caller is
  *         responsible for freeing the allocated memory.
  */
-#define strConcat(...) better_strcat_impl(__VA_ARGS__, (String) NULL)
+#define strConcat(...) better_strcat_impl(__VA_ARGS__, (String)NULL)
 
 /**
  * @brief Check if a string is empty after removing leading and trailing whitespaces
@@ -108,7 +108,7 @@ String strtrim(String s);
  *
  * @return The total number of tokens found in the string.
  */
-uint tokenizeString(String str, constString delim, String* destArray);
+uint tokenizeString(String str, constString delim, String *destArray);
 
 /**
  * @brief Duplicate a string in memory

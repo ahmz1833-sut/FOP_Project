@@ -1,9 +1,10 @@
-#include "header.h"
+#include "neogit.h"
 #include "install.h"
 #include "phase1.h"
 #include "phase2.h"
 
-// #define __DEBUG_MODE__ "neogit config --global -R user.name"
+// #define __DEBUG_MODE__ "neogit config alias.src"
+int _err = 0;
 
 const Command cmds[] = {
     {"init", 2, 2, command_init, CMD_INIT_USAGE},
@@ -41,7 +42,10 @@ void Welcome();
 int main()
 {
     constString argv[20];
-    uint argc = tokenizeString(strDup(__DEBUG_MODE__), " ", (String*)argv);
+    uint argc = tokenizeString(strDup(__DEBUG_MODE__), " ", (String *)argv);
+
+    // int argc = 4;
+    // constString argv[] = {"neogit", "config", "alias.src", "neogit init"};
 #else
 int main(int argc, constString argv[])
 {
@@ -83,18 +87,34 @@ int process_command(int argc, constString argv[], bool performActions)
             if (checkArgumentPure(2, "--help"))
             {
                 if (performActions)
-                    printf(_SGR_CYANF "Usage : \n%s\n"_SGR_RESET, cmds[i].usageHelp);
+                    printf(_CYAN "Usage : \n%s\n"_RST, cmds[i].usageHelp);
                 return ERR_NOERR;
             }
             // Execute the command function if arguments are valid
             else if (argc >= cmds[i].minArgc && (!cmds[i].maxArgc || argc <= cmds[i].maxArgc) && !(cmds[i].function(argc - 1, argv + 1, false)))
-                return cmds[i].function(argc - 1, argv + 1, performActions);
+            {
+                int error = cmds[i].function(argc - 1, argv + 1, performActions);
+                if (performActions)
+                {
+                    switch (error)
+                    {
+                    case ERR_ARGS_MISSING:
+                        break;
+                    case ERR_NOREPO:
+                        printError("Repository is not initialized!!");
+                    default:
+                        return error;
+                    }
+                }
+                else
+                    return error;
+            }
 
             // Display an error message if arguments are missing or invalid
             if (performActions)
             {
                 printError("Error! Missing Argument or Invalid Command!");
-                printf(_SGR_CYANF "Usage : \n%s\n"_SGR_RESET, cmds[i].usageHelp);
+                printf(_CYAN "Usage : \n%s\n"_RST, cmds[i].usageHelp);
             }
             return ERR_ARGS_MISSING;
         }
@@ -102,9 +122,9 @@ int process_command(int argc, constString argv[], bool performActions)
 
     if (argc == 2) // Check if command is an alias
     {
-        String alias = strConcat("alias.", argv[1]);
-        String aliasCommand = getConfig(alias);
-        free(alias);
+        String aliasCommand;
+        withString(alias, strConcat("alias.", argv[1]))
+            aliasCommand = getConfig(alias);
         if (aliasCommand)
         {
             String alias_argv[20];
@@ -121,11 +141,11 @@ int process_command(int argc, constString argv[], bool performActions)
 
 void Welcome()
 {
-    printf(_SGR_YELLOWF "Welcome to the neogit!\n"_SGR_DEF_FG
+    printf(_YEL "Welcome to the neogit!\n"_DFCOLOR
                         "Valid commands are listed below: \n");
     for (int i = 0; cmds[i].key != NULL; i++)
-        printf(_SGR_YELLOWF "|" _SGR_DEF_FG " %s ", cmds[i].key);
-    printf("\n" _SGR_RESET);
+        printf(_YEL "|" _DFCOLOR " %s ", cmds[i].key);
+    printf("\n" _RST);
 
     // Retrieve configured aliases
     String aliases[50];
@@ -135,5 +155,5 @@ void Welcome()
     if (aliasNum)
         printf("\nConfigured Aliases : \n");
     for (int i = 0; i < aliasNum; i++)
-        printf(_SGR_CYANF "%s" _SGR_REDF " -> " _SGR_DEF_FG "%s\n", aliases[i], getConfig(strConcat("alias.", aliases[i])));
+        printf(_CYAN "%s" _RED " -> " _DFCOLOR "%s\n", aliases[i], getConfig(strConcat("alias.", aliases[i])));
 }

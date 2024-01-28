@@ -1,5 +1,6 @@
 # Tests folder
 tests/
+.neogit/
 
 # Compiled object files
 *.slo

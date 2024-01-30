@@ -3,9 +3,9 @@
 // Global variable for cwd (Used in other c files - valued in begining of main())
 String curWorkingDir = NULL;
 // Global variable for current repository (Used in other c files - valued in begining of main())
-String curRepoPath = NULL;
+Repository *curRepository = NULL;
 
-String obtainRepository(constString workDir)
+Repository *obtainRepository(constString workDir)
 {
 	// Declare variable to store the repository path
 	String repoPath = NULL;
@@ -40,7 +40,16 @@ String obtainRepository(constString workDir)
 		// Change back to the original working directory (Pop from temp variable)
 		chdir(tmpWorkDir);
 	}
-	return repoPath;
+	if (repoPath)
+	{
+		Repository *repo = (Repository *)malloc(sizeof(Repository));
+		repo->absPath = repoPath;
+		repo->stagingArea.len = 0;
+		repo->stagingArea.arr = NULL;
+		return repo;
+	}
+	else
+		return NULL;
 }
 
 /**
@@ -75,7 +84,7 @@ String ـgetconfigpath(bool global)
 	else
 	{
 		// Generate the repository-specific configuration path
-		configPath = strConcat(curRepoPath, "/." PROGRAM_NAME "/config");
+		configPath = strConcat(curRepository->absPath, "/." PROGRAM_NAME "/config");
 		char cmd[PATH_MAX];
 		// Ensure the file exists by creating an empty file
 		sprintf(cmd, "touch \"%s\"", configPath);
@@ -178,7 +187,7 @@ String getConfig(constString key)
 	char globalValue[STR_LINE_MAX] = {0};
 	time_t globalConfigSetTime = _loadconfig(key, globalValue, true);
 
-	if (!curRepoPath) // Repo not initialized
+	if (!curRepository) // Repo not initialized
 		return *globalValue ? strDup(globalValue) : NULL;
 
 	char localValue[STR_LINE_MAX] = {0};
@@ -257,7 +266,7 @@ int getAliases(String *keysDest)
 	}
 
 	// Retrieve alias keys from the local configuration if in a repository
-	if (curRepoPath)
+	if (curRepository)
 	{
 		tryWithString(LconfigPath, ـgetconfigpath(false), {}, {})
 		{
@@ -286,4 +295,107 @@ int getAliases(String *keysDest)
 bool isGitIgnore(FileEntry *entry)
 {
 	return entry->isDir && isMatch(getFileName(entry->path), ".git");
+}
+
+StagedFile *getStagedFile(constString path)
+{
+	for (int i = 0; i < curRepository->stagingArea.len; i++)
+		if (!strcmp(curRepository->stagingArea.arr[i].file.path, path))
+			return &(curRepository->stagingArea.arr[i]);
+	return NULL;
+}
+
+int removeFromStage(StagedFile *sf)
+{
+}
+
+int addToStage(FileEntry *file)
+{
+	StagedFile *sf = NULL;
+	if (!(sf = getStagedFile(file->path)))
+	{
+		ADD_EMPTY(curRepository->stagingArea, StagedFile);
+		sf = &(curRepository->stagingArea.arr[curRepository->stagingArea.len - 1]);
+	}
+	else
+		withString(oldPath, strConcat(curRepository->absPath, "/", sf->hashedPath))
+			remove(oldPath);
+
+	sf->file = getFileEntry(file->path, curRepository->absPath);
+	strcpy(sf->hashedPath, "." PROGRAM_NAME "/stage/");
+	withString(hash, toHexString(generateUniqueId(10), 10))
+		strcat(sf->hashedPath, hash);
+
+	int err = copyFile(file->path, sf->hashedPath, curRepository->absPath);
+	if (err)
+		return err;
+
+	char path[PATH_MAX];
+	strConcatStatic(path, curRepository->absPath, "/." PROGRAM_NAME "/stage/info");
+	withString(touchCmd, strConcat("touch \"", path, "\""))
+		system(touchCmd);
+
+	// add to info file
+	tryWithFile(infoFile, path, ({ return ERR_FILE_ERROR; }), ({ return _ERR; }))
+	{
+		int error = 0;
+		char pattern[STR_LINE_MAX];
+		sprintf(pattern, "%s:*:*:*", sf->file.path);
+		int res = searchLine(infoFile, pattern);
+		sprintf(pattern, "%s:%ld:%u:%s\n", sf->file.path, sf->file.dateModif, sf->file.permission, getFileName(sf->hashedPath));
+		if (res != -1)
+			error = replaceLine(infoFile, res, pattern);
+		else
+			fputs(pattern, freopen(path, "ab+", infoFile));
+		throw(error);
+	}
+	return ERR_NOERR;
+}
+
+int trackFile(String filepath)
+{
+	if (isTrackedFile(filepath))
+		return ERR_NOERR;
+	char manifestFilePath[PATH_MAX];
+	strConcatStatic(manifestFilePath, curRepository->absPath, "/." PROGRAM_NAME "/tracked");
+	systemf("touch \"%s\"", manifestFilePath);
+	tryWithFile(manifestFile, manifestFilePath, ({ return ERR_FILE_ERROR; }), ({ return _ERR; }))
+	{
+		freopen(manifestFilePath, "a+", manifestFile);
+		fputs(filepath, manifestFile);
+		fputc('\n', manifestFile);
+	}
+	return ERR_NOERR;
+}
+
+bool isTrackedFile(String path)
+{
+	char manifestFilePath[PATH_MAX];
+	strConcatStatic(manifestFilePath, curRepository->absPath, "/." PROGRAM_NAME "/tracked");
+	systemf("touch \"%s\"", manifestFilePath);
+	tryWithFile(manifestFile, manifestFilePath, ({ return ERR_FILE_ERROR; }), ({ return _ERR; }))
+	{
+		char buf[PATH_MAX];
+		while(fgets(buf, sizeof(buf), manifestFile)!=NULL)
+			if(isMatch(buf, path))
+				return true;
+	}
+}
+
+bool isChangedStaging(String path)
+{
+	StagedFile *sf = NULL;
+	if (!(sf = getStagedFile(path)))
+		return true;
+
+	FileEntry fe = getFileEntry(path, curRepository->absPath);
+	if (fe.path == NULL) // Handle Deleted file
+		return true;
+	freeFileEntry(&fe, 1);
+
+	bool contentChanged = true;
+	if (sf->file.dateModif == fe.dateModif)
+		contentChanged = false;
+
+	return contentChanged || (fe.permission != sf->file.permission);
 }

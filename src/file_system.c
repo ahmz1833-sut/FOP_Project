@@ -5,10 +5,9 @@ String normalizePath(constString _path, constString _repoPath)
 	String absolutePath = NULL;
 	tryWithString(buf, malloc(PATH_MAX), ({ return NULL; }), ({ return NULL; }))
 	{
-		absolutePath = buf;
 		if (realpath(_path, buf) == 0)
 			throw(0);
-
+		absolutePath = buf;
 		if (_repoPath != NULL && strlen(_repoPath) > 1)
 		{
 			if (strstr(buf, _repoPath) == NULL)
@@ -38,7 +37,7 @@ FileEntry getFileEntry(constString _path, constString _repopath)
 	entry.fileSize = _fs.st_size;
 	entry.dateModif = _fs.st_mtime;
 	entry.isDir = S_ISDIR(_fs.st_mode);
-	entry.isLink = S_ISLNK(_fs.st_mode);
+	entry.isDeleted = 0;
 	entry.permission = _fs.st_mode & 0x1FF;
 err:
 	return entry;
@@ -46,7 +45,7 @@ err:
 
 int ls(FileEntry **buf, constString _path)
 {
-	tryWithString(path, normalizePath(_path, "/"), ({  return -1; }), ({  return _ERR; }))
+	tryWithString(path, normalizePath(_path, "/"), ({ return -1; }), ({ return _ERR; }))
 	{
 		// if Path not exist
 		if (access(path, F_OK) != 0)
@@ -87,57 +86,6 @@ int ls(FileEntry **buf, constString _path)
 		else
 			throw(-2);
 	}
-
-	// if (!(path = ))
-	// 	return -1;
-
-	// 	if (access(path, F_OK))
-	// 		goto err;
-
-	// 	struct stat st;
-	// 	stat(path, &st);
-
-	// 	// if path is a directory -> obtain childs entries and put into buf
-	// 	if (S_ISDIR(st.st_mode))
-	// 	{
-	// 		DIR *dir = opendir(path);
-	// 		if (dir == NULL)
-	// 			goto err;
-	// 		struct dirent *entry;
-	// 		FileEntry *childs;
-	// 		uint countOfChilds = 0;
-	// 		while ((entry = readdir(dir)) != NULL)
-	// 		{
-	// 			// Don't add . and .. to childs
-	// 			if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, ".."))
-	// 				continue;
-
-	// 			if (countOfChilds == 0)
-	// 				childs = (FileEntry *)malloc((countOfChilds = 1) * sizeof(FileEntry));
-	// 			else
-	// 				childs = (FileEntry *)realloc(childs, (++countOfChilds) * sizeof(FileEntry));
-
-	// 			String entryPath = strConcat(path, "/", entry->d_name);
-	// 			childs[countOfChilds - 1] = getFileEntry(entryPath, NULL);
-	// 			free(entryPath);
-	// 		}
-	// 		closedir(dir);
-	// 		free(path);
-	// 		if (buf)
-	// 			*buf = childs;
-	// 		return countOfChilds;
-	// 	}
-
-	// 	// if path is not a directory -> return -2
-	// 	else
-	// 	{
-	// 		free(path);
-	// 		return -2;
-	// 	}
-
-	// err:
-	// 	free(path);
-	// 	return -1;
 }
 
 void freeFileEntry(FileEntry *array, uint len)
@@ -167,6 +115,21 @@ int fileMemMove(FILE *file, long source, long destination, size_t size)
 		return ERR_FILE_ERROR;
 	else
 		return ERR_NOERR;
+}
+
+int searchLine(FILE *file, constString pattern)
+{
+	int lineNum = 1;
+	char buf[STR_LINE_MAX];
+	rewind(file);
+	for (lineNum = 1; fgets(buf, STR_LINE_MAX - 1, file) != 0; lineNum++)
+		if (isMatch(buf, pattern))
+		{
+			rewind(file);
+			return lineNum;
+		}
+	
+	return -1;
 }
 
 int replaceLine(FILE *file, int lineNumber, constString newContent)
@@ -248,4 +211,48 @@ int insertLine(FILE *file, int lineNumber, constString newContent)
 		return ERR_FILE_ERROR;
 	else
 		return ERR_NOERR;
+}
+
+int copyFile(constString _src, constString _dest, constString repo)
+{
+	char src[PATH_MAX], dest[PATH_MAX];
+	strConcatStatic(src, repo, "/", _src);
+	strConcatStatic(dest, repo, "/", _dest);
+	
+	char dir[PATH_MAX];
+	systemf("mkdir -p \"%s\"", getDirName(dir, dest));
+	systemf("touch \"%s\"", dest);
+
+	tryWithFile(srcFile, src, ({ return ERR_FILE_ERROR; }), ({ return _ERR; }))
+	{
+		tryWithFile(destFile, dest, throw(ERR_FILE_ERROR), throw(_ERR))
+		{
+			size_t size = GET_FILE_SIZE(srcFile);
+			for (long i = 0; i < size / 512; i++)
+			{
+				char sectorBuf[512];
+				fread(sectorBuf, 1, 512, srcFile);
+				fwrite(sectorBuf, 1, 512, destFile);
+			}
+			for (long i = 0; i < size % 512; i++)
+			{
+				char buf;
+				fread(&buf, 1, 1, srcFile);
+				fwrite(&buf, 1, 1, destFile);
+			}
+			throw(ferror(srcFile) || ferror(destFile));
+		}
+	}
+}
+
+typedef struct
+{
+
+} Diff;
+
+Diff *getDiff(String path1, String path2)
+{
+	Diff *diff = malloc(sizeof(Diff));
+
+	return NULL;
 }

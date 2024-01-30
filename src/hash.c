@@ -5,7 +5,7 @@ ullong djb2Hash(constString str)
     ullong hash = rand() * rand();
     int c;
     while (c = *str++)
-        hash = ((hash << (rand() % 8)) + hash) + (rand() % c);
+        hash = (((hash << (c % 16))) + hash) + (rand() % c);
     return hash;
 }
 

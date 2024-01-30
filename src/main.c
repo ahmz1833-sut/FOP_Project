@@ -3,7 +3,7 @@
 #include "phase1.h"
 #include "phase2.h"
 
-// #define __DEBUG_MODE__ "neogit config alias.src"
+// #define __DEBUG_MODE__ "neogit add f2f"
 int _err = 0;
 
 const Command cmds[] = {
@@ -55,8 +55,10 @@ int main(int argc, constString argv[])
     // Put these into global variables in Global variables in neogit.c
     extern String curWorkingDir; // Declared in neogit.c
     curWorkingDir = getcwd(NULL, PATH_MAX);
-    extern String curRepoPath; // Declared in neogit.c
-    curRepoPath = obtainRepository(curWorkingDir);
+    extern Repository* curRepository; // Declared in neogit.c
+    curRepository = obtainRepository(curWorkingDir);
+
+    if(curRepository) popStage();
 
     if (checkArgument(1, "--uninstall")) // Uninstall Command
         exit(promptUninstallation());
@@ -141,7 +143,7 @@ int process_command(int argc, constString argv[], bool performActions)
 
 void Welcome()
 {
-    printf(_YEL "Welcome to the neogit!\n"_DFCOLOR
+    printf(_YEL "Welcome to the " PROGRAM_NAME "!\n"_DFCOLOR
                         "Valid commands are listed below: \n");
     for (int i = 0; cmds[i].key != NULL; i++)
         printf(_YEL "|" _DFCOLOR " %s ", cmds[i].key);

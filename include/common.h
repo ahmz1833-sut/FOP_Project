@@ -24,11 +24,14 @@ typedef char const *constString;
 #define ERR_CONFIG_NOTFOUND 5
 #define ERR_ALREADY_EXIST 6
 #define ERR_MALLOC 7
-#define ERR_44 8
+#define ERR_NOT_EXIST 8
 #define ERR_UNKNOWN 100
 
 #define STR_LINE_MAX 256
 #define STR_MAX 1000
+#define STR_CMD_MAX 10000
+
+#define systemf(...) ({char _cmd[STR_CMD_MAX]; sprintf(_cmd, __VA_ARGS__); system(_cmd); })
 
 #define printWarning(...)                  \
 	({                                     \
@@ -49,12 +52,28 @@ typedef char const *constString;
 	})
 
 // Useful Macros for Debug :)
-#define _DEBUG_(...)                                                                   \
-	printf("\n" _YEL_BKG "\tDEBUG (Line %d, File %s): " _DBCOLOR, __LINE__, __FILE__); \
-	printf(_YEL __VA_ARGS__)
+#define _DEBUG_(...)                                                                 \
+	printf(_BLU_BKG "\tDEBUG (Line %d, File %s):" _DBCOLOR " ", __LINE__, __FILE__); \
+	printf(_YEL __VA_ARGS__);                                                        \
+	printf(_RST "\n")
 
-#define _RST_ERR ({extern int _err; _err = 0;})
-#define _ERR ({extern int _err; _err;})
+#define ADD_EMPTY(array, type)                              \
+	if (array.len == 0)                                     \
+		array.arr = malloc((array.len = 1) * sizeof(type)); \
+	else                                                    \
+		array.arr = realloc(array.arr, sizeof(type) * (++array.len));
+
+// #define DELETE_FROM_ARRAY(object, targetArray)                                         \
+//     if (object >= targetArray.arr && (object - targetArray.arr) < targetArray.len) \
+//     {                                                                                  \
+//         memmove(targetArray.arr + (object - targetArray.arr),                      \
+//                 targetArray.arr + (object - targetArray.arr) + 1,                  \
+//                 --(targetArray.len) - (object - targetArray.arr));                   \
+//         targetArray.array = realloc(targetArray.array, targetArray.len);               \
+//     }
+
+#define _RST_ERR ({extern int _err; _err = 0; })
+#define _ERR ({extern int _err; _err; })
 
 #define tryWith(type, p, val, fail, exep, fre) for (type p = (val); (p && !_RST_ERR) && (p || ((fail), 0)) && p != (void *)1; ({fre; if(_ERR)(exep); p = (void *)1; }))
 #define with(p, val, fre) tryWith(typeof(val), p, val, {}, {}, fre)

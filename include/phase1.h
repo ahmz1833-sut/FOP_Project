@@ -24,8 +24,8 @@ int command_init(int argc, constString argv[], bool performActions);
  * - Various error codes for specific failures during set or remove operations.
  */
 int command_config(int argc, constString argv[], bool performActions);
-#define CMD_CONFIG_USAGE "Set a config: " _BOLD "neogit config [--global] <key> <value>\n" _UNBOLD \
-						 "Remove a config : " _BOLD "neogit config [--global] -R <key>\n" _UNBOLD  \
+#define CMD_CONFIG_USAGE "Set a config: " _BOLD PROGRAM_NAME " config [--global] <key> <value>\n" _UNBOLD \
+						 "Remove a config : " _BOLD PROGRAM_NAME " config [--global] -R <key>\n" _UNBOLD  \
 						 "Valid keys are : user.* / alias.*"
 
 int command_add(int argc, constString argv[], bool performActions);

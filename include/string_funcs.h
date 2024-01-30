@@ -40,6 +40,10 @@
  */
 #define strConcat(...) better_strcat_impl(__VA_ARGS__, (String)NULL)
 
+#define strConcatStatic(dest, first, ...) _static_strcat_impl(dest, first, __VA_ARGS__, (String)NULL)
+
+String _static_strcat_impl(String dest, constString first, ...);
+
 /**
  * @brief Check if a string is empty after removing leading and trailing whitespaces
  *

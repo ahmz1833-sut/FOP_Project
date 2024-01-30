@@ -111,6 +111,21 @@ String strDup(constString src)
     return dest;
 }
 
+String _static_strcat_impl(String dest, constString first, ...)
+{
+	va_list l;
+    constString s;
+    size_t cnt = 0;
+
+    va_start(l, first);
+    strcpy(dest, first);
+    while (s = va_arg(l, String))
+        strcat(dest, s);
+    va_end(l);
+
+    return dest;
+}
+
 String better_strcat_impl(constString first, ...)
 {
     va_list l;

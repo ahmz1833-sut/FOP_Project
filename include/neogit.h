@@ -7,6 +7,8 @@
 #include "ansi_color.h"
 #include "string_funcs.h"
 #include "file_system.h"
+#include "hash.h"
+#include "pushpop.h"
 
 #define PROGRAM_NAME "neogit"
 
@@ -18,6 +20,47 @@ typedef struct
 	int (*function)(int, constString[], bool);
 	constString usageHelp;
 } Command;
+
+typedef struct
+{
+    FileEntry file;
+    char hashedPath[25]; // ".neogit/stage/<10 digit hash>"
+} StagedFile;
+
+typedef struct
+{
+    StagedFile *arr;
+    uint len;
+} StagedFileArray;
+
+typedef struct
+{
+
+} Commit;
+
+typedef struct
+{
+
+} CommitArray;
+
+typedef struct
+{
+    String headCommitHash;
+    CommitArray commitList;
+} Branch;
+
+typedef struct
+{
+	Branch* arr;
+	uint len;
+} BranchArray;
+
+typedef struct
+{
+    String absPath;
+    StagedFileArray stagingArea;
+    BranchArray branches;
+} Repository;
 
 #define checkArgument(num, cmd) (argc >= (num) + 1 && isMatch(argv[num], cmd))
 #define checkArgumentPure(num, cmd) (argc == num + 1 && isMatch(argv[num], cmd))
@@ -61,7 +104,9 @@ int process_command(int argc, constString argv[], bool performActions);
  * repository is not found, or if memory allocation fails, NULL is returned. The caller
  * is responsible for freeing the memory allocated for the result.
  */
-String obtainRepository(constString workDir);
+
+
+Repository* obtainRepository(constString workDir);
 
 /**
  * @brief Set a configuration key-value pair in the specified configuration file.
@@ -125,7 +170,12 @@ int removeConfig(constString key, bool global);
  * @return The total number of unique alias keys found. If an error occurs or no alias keys are found, 0 is returned.
  */
 int getAliases(String *keysDest);
-
 bool isGitIgnore(FileEntry *entry);
+int removeFromStage(StagedFile *sf);
+int addToStage(FileEntry *file);
+int trackFile(String filepath);
+StagedFile *getStagedFile(constString path);
+bool isTrackedFile(String path);
+bool isChangedStaging(String path);
 
 #endif

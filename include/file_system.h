@@ -19,10 +19,13 @@ typedef struct
 	time_t dateModif;
 	uint permission : 9;
 	unsigned isDir : 1;
-	unsigned isLink : 1;
+	unsigned isDeleted : 1;
 } FileEntry;
 
+#define VALID_CHARS "a-zA-Z0-9._/!@&^,'( ){}-"
+
 #define getFileName(path) (strrchr(path, '/') ? strrchr(path, '/') + 1 : path)
+#define getDirName(dest, path) ({char* s=strrchr(path, '/'); int _idx = s?s-path:0; strncpy(dest,path,_idx); dest[_idx]='\0'; dest; })
 
 /**
  * @brief Move the file cursor to a specific line number
@@ -83,6 +86,8 @@ typedef struct
  *         ERR_NOERR is returned for success, while ERR_FILE_ERROR indicates an error.
  */
 int fileMemMove(FILE *file, long source, long destination, size_t size);
+
+int searchLine(FILE *file, constString pattern);
 
 /**
  * @brief Replace a line in a file with new content
@@ -175,6 +180,8 @@ FileEntry getFileEntry(constString _path, constString _repopath);
  * 			if the input path is a file, returns -2.
  */
 int ls(FileEntry **buf, constString path);
+
+int copyFile(constString _src, constString _dest, constString repo);
 
 void freeFileEntry(FileEntry *array, uint len);
 

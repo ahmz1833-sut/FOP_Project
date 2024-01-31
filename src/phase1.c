@@ -58,7 +58,7 @@ void printTree(FileEntry *root, uint curDepth, int (*listFunction)(FileEntry **,
     free(array);
 }
 
-void printStagedStatus(FileEntry *element)
+void __stage_print_func(FileEntry *element)
 {
     if (isMatch(element->path, ".neogit")) // .neogit Directory
         printf(_MAGNTA _BOLD ".neogit" _UNBOLD " (NeoGIT Directory)\n" _RST);
@@ -70,6 +70,71 @@ void printStagedStatus(FileEntry *element)
         printf(_YEL _BOLD "%s" _UNBOLD " → Modified\n" _RST, getFileName(element->path));
     else // Staged
         printf(_BOLD "%s" _UNBOLD " → Staged\n" _RST, getFileName(element->path));
+}
+
+void __status_print_func(FileEntry *element)
+{
+    String name = getFileName(element->path);
+
+    if (isMatch(element->path, ".neogit")) // .neogit Directory
+        printf(_MAGNTA _BOLD ".neogit" _UNBOLD " (NeoGIT Directory)\n" _RST);
+    else if (element->isDir) // Directory
+        printf(_BLU "%s"
+                    " (dir)\n" _RST,
+               name);
+
+    else
+    {
+        ChangeStatus changes = getChangesFromStaging(element->path);
+        bool staged = !changes; // FASLE if there is change between working dir and staging area
+        if (staged)
+            changes = getChangesFromHEAD(element->path);
+
+        switch (changes)
+        {
+        case ADDED:
+            printf(_GRN _BOLD "%s" _UNBOLD " → A%c\n" _RST, name, staged ? '+' : '-');
+            break;
+        case MODIFIED:
+            printf(_YEL _BOLD "%s" _UNBOLD " → M%c\n" _RST, name, staged ? '+' : '-');
+            break;
+        case DELETED:
+            printf(_RED _BOLD "%s" _UNBOLD " → D%c\n" _RST, name, staged ? '+' : '-');
+            break;
+        case PERM_CHANGED:
+            printf(_CYAN _BOLD "%s" _UNBOLD " → T%c\n" _RST, name, staged ? '+' : '-');
+            break;
+        }
+    }
+}
+
+int __status_list_func(FileEntry **buf, constString dest)
+{
+    FileEntry *mybuf = NULL;
+    int count = lsCombo(&mybuf, dest);
+    if (count <= 0)
+        return count;
+
+    int newCount = 0;
+    for (int i = 0; i < count; i++)
+    {
+        String localPath = getFileEntry(mybuf[i].path, curRepository->absPath).path;
+        if (mybuf[i].isDir || getChangesFromHEAD(localPath) || getChangesFromStaging(localPath))
+        {
+            // add to buf
+            if (newCount == 0)
+                *buf = (FileEntry *)malloc((newCount = 1) * sizeof(FileEntry));
+            else
+                *buf = (FileEntry *)realloc(*buf, (++newCount) * sizeof(FileEntry));
+
+            (*buf)[newCount - 1] = mybuf[i];
+        }
+        else // don't  add to buf
+            free(mybuf[i].path);
+        free(localPath);
+    }
+    free(mybuf);
+    return newCount;
 }
 
 int command_init(int argc, constString argv[], bool performActions)
@@ -84,8 +149,20 @@ int command_init(int argc, constString argv[], bool performActions)
         }
 
         // make .neogit folder and create repo
-        withString(neogitFolder, strConcat(curWorkingDir, "/." PROGRAM_NAME))
-            mkdir(neogitFolder, 0755);
+        char neogitFolder[PATH_MAX], tmpPath[PATH_MAX];
+        mkdir(strConcatStatic(neogitFolder, curWorkingDir, "/." PROGRAM_NAME), 0775);
+        mkdir(strConcatStatic(tmpPath, neogitFolder, "/stage"), 0775);
+        mkdir(strConcatStatic(tmpPath, neogitFolder, "/objects"), 0775);
+        mkdir(strConcatStatic(tmpPath, neogitFolder, "/stash"), 0775);
+        systemf("touch .neogit/config");
+        systemf("touch .neogit/tracked");
+        systemf("touch .neogit/HEAD");
+        systemf("touch .neogit/branches");
+        systemf("touch .neogit/tags");
+
+        // TODO: create branch master and checkout it;
+        printf(_CYAN "The branch " _BOLD "\'%s\'" _UNBOLD " created successfully!\n" _RST, "master");
+        printf(_CYAN "You are checked out the branch " _BOLD "\'%s\'" _UNBOLD " successfully!\n" _RST, "master");
     }
     return ERR_NOERR;
 }
@@ -189,7 +266,7 @@ int command_add(int argc, constString argv[], bool performActions)
             return ERR_NOERR;
 
         FileEntry root = getFileEntry(".", NULL);
-        printTree(&root, atoi(argv[2]), ls, printStagedStatus);
+        printTree(&root, atoi(argv[2]), ls, __stage_print_func);
         freeFileEntry(&root, 1);
         return ERR_NOERR;
     }
@@ -402,7 +479,7 @@ int command_reset(int argc, constString argv[], bool performActions)
                 // .gitignore patterns are handled here.
                 if (isGitIgnore(&fileE))
                     continue;
-                
+
                 int res = 0;
                 res = removeFromStage(fileE.path);
                 if (res == ERR_NOERR)
@@ -445,96 +522,203 @@ int command_reset(int argc, constString argv[], bool performActions)
 
 int command_status(int argc, constString argv[], bool performActions)
 {
-    // Check Syntax
+    if (!performActions)
+        return ERR_NOERR;
+    if (!curRepository)
+        return ERR_NOREPO;
 
-    // Perform Acions if required
-    if (performActions)
-    {
-        if (!curRepository)
-            return ERR_NOREPO;
-    }
+    FileEntry root = getFileEntry(".", NULL);
+    printTree(&root, 15, __status_list_func, __status_print_func);
+    freeFileEntry(&root, 1);
+    return ERR_NOERR;
 }
 
 int command_commit(int argc, constString argv[], bool performActions)
 {
-    // Check Syntax
+    char message[COMMIT_MSG_LEN_MAX + 1];
+    if (!performActions)
+        return ERR_NOERR;
+    if (!curRepository)
+        return ERR_NOREPO;
 
-    // Perform Acions if required
-    if (performActions)
+    // Check message
+    if (checkArgument(1, "-m"))
     {
-        if (!curRepository)
-            return ERR_NOREPO;
+        if (strlen(argv[2]) > COMMIT_MSG_LEN_MAX)
+        {
+            if (performActions)
+                printError("The message longer than COMMIT_MSG_LEN_MAX.");
+            return ERR_GENERAL;
+        }
+        strValidate(message, argv[2], VALID_CHARS);
     }
+
+    else if (checkArgument(1, "-s"))
+    {
+        char configKey[strlen(argv[2]) + 10];
+        tryWithString(shortcutKey, malloc(sizeof(configKey)), ({ return ERR_MALLOC; }), ({ return _ERR; }))
+        {
+            strValidate(shortcutKey, argv[2], VALID_CHARS);
+            if (isEmpty(shortcutKey))
+                throw(ERR_ARGS_MISSING);
+            strConcatStatic(configKey, "shortcut/", strtrim(shortcutKey));
+        }
+        String value = getConfig(configKey);
+        if (value)
+            strcpy(message, value);
+        else
+        {
+            if (performActions)
+                printError("The shortcut key not found!");
+            return ERR_GENERAL;
+        }
+    }
+
+    printf("%s\n", message);
+
+    // Check the user.name and user.email
+    String name = getConfig("user.name");
+    if(!name)
+    {
+        printError("Please submit your information and configs for NeoGIT!");
+        printError("You haven't been configured the UserName!");
+        printError("You can set it by Command: " _BOLD "\"neogit config [--global] user.name <yourname>\"" _RST);
+        return ERR_CONFIG_NOTFOUND;
+    }
+    String email = getConfig("user.email");
+    if(!email)
+    {
+        printError("Please submit your information and configs for NeoGIT!");
+        printError("You haven't been configured your Email!");
+        printError("You can set it by Command: " _BOLD "\"neogit config [--global] user.email <youremail@example.com>\"" _RST);
+        return ERR_CONFIG_NOTFOUND;
+    }
+    
+    // message is persent !
+    // Perform the commit
+
+    // Chnage curRepository->head.headFiles
+    // 
+
+    // TODO
+    return ERR_NOERR;
 }
 
-int command_set(int argc, constString argv[], bool performActions)
+int command_shortcutmsg(int argc, constString argv[], bool performActions)
 {
     // Check Syntax
+    int shortcut = checkAnyArgument("-s") + 1;
+    int message = checkAnyArgument("-m") + 1;
+    if (argc != 5 || shortcut == 1 || message == 1)
+        return ERR_ARGS_MISSING;
 
-    // Perform Acions if required
-    if (performActions)
+    char configKey[strlen(argv[shortcut]) + 10];
+    tryWithString(shortcutKey, malloc(sizeof(configKey)), ({ return ERR_MALLOC; }), ({ return _ERR; }))
     {
-        if (!curRepository)
-            return ERR_NOREPO;
+        strValidate(shortcutKey, argv[shortcut], VALID_CHARS);
+        if (isEmpty(shortcutKey))
+            throw(ERR_ARGS_MISSING);
+        strConcatStatic(configKey, "shortcut/", strtrim(shortcutKey));
     }
-}
 
-int command_replace(int argc, constString argv[], bool performActions)
-{
-    // Check Syntax
+    char value[strlen(argv[message]) + 1];
+    strValidate(value, argv[message], VALID_CHARS);
 
-    // Perform Acions if required
-    if (performActions)
+    if (strlen(value) > COMMIT_MSG_LEN_MAX)
     {
-        if (!curRepository)
-            return ERR_NOREPO;
+        if (performActions)
+            printError("The message longer than COMMIT_MSG_LEN_MAX.");
+        return ERR_GENERAL;
     }
+
+    if (!performActions)
+        return ERR_NOERR;
+
+    if (!curRepository)
+        return ERR_NOREPO;
+
+    if (checkArgument(0, "set") && getConfig(configKey))
+    {
+        printError("The shortcut key already exist!");
+        return ERR_ALREADY_EXIST;
+    }
+    else if (checkArgument(0, "replace") && !getConfig(configKey))
+    {
+        printError("The shortcut key does not exist!");
+        return ERR_NOT_EXIST;
+    }
+
+    // Perform Acions
+    int err = setConfig(configKey, value, time(NULL), false);
+    if (err == ERR_NOERR)
+        printf("The shortcut " _CYAN "%s" _DFCOLOR " successfully set to message " _CYAN "\"%s\"\n" _RST, configKey + strlen("shortcut/"), value);
+    else
+        printError("Error in set shortcut message!");
+
+    return err;
 }
 
 int command_remove(int argc, constString argv[], bool performActions)
 {
     // Check Syntax
+    if (argc != 3 || !checkArgument(1, "-s"))
+        return ERR_ARGS_MISSING;
 
-    // Perform Acions if required
-    if (performActions)
+    char configKey[strlen(argv[2]) + 10];
+    tryWithString(shortcutKey, malloc(sizeof(configKey)), ({ return ERR_MALLOC; }), ({ return _ERR; }))
     {
-        if (!curRepository)
-            return ERR_NOREPO;
+        strValidate(shortcutKey, argv[2], VALID_CHARS);
+        if (isEmpty(shortcutKey))
+            throw(ERR_ARGS_MISSING);
+        strConcatStatic(configKey, "shortcut/", strtrim(shortcutKey));
     }
+
+    if (!performActions)
+        return ERR_NOERR;
+
+    if (!curRepository)
+        return ERR_NOREPO;
+
+    int err = removeConfig(configKey, false);
+    if (err == ERR_NOERR)
+        printf("The shortcut key " _CYAN "%s" _DFCOLOR " removed successfully!\n" _RST, configKey + strlen("shortcut/"));
+    else
+        printError("Shortcut key does not exist!");
+    return err;
 }
 
 int command_log(int argc, constString argv[], bool performActions)
 {
     // Check Syntax
 
-    // Perform Acions if required
-    if (performActions)
-    {
-        if (!curRepository)
-            return ERR_NOREPO;
-    }
+    if (!performActions)
+        return ERR_NOERR;
+    if (!curRepository)
+        return ERR_NOREPO;
+    
+    return ERR_NOERR;
 }
 
 int command_branch(int argc, constString argv[], bool performActions)
 {
     // Check Syntax
 
-    // Perform Acions if required
-    if (performActions)
-    {
-        if (!curRepository)
-            return ERR_NOREPO;
-    }
+    if (!performActions)
+        return ERR_NOERR;
+    if (!curRepository)
+        return ERR_NOREPO;
+
+    return ERR_NOERR;
 }
 
 int command_checkout(int argc, constString argv[], bool performActions)
 {
     // Check Syntax
 
-    // Perform Acions if required
-    if (performActions)
-    {
-        if (!curRepository)
-            return ERR_NOREPO;
-    }
+    if (!performActions)
+        return ERR_NOERR;
+    if (!curRepository)
+        return ERR_NOREPO;
+
+    return ERR_NOERR;
 }

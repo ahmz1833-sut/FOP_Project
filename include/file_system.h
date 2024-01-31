@@ -21,6 +21,17 @@ typedef struct
 	unsigned isDeleted : 1;
 } FileEntry;
 
+typedef struct
+{
+	String *linesRemoved;
+	uint *lineNumberRemoved;
+	uint removedCount;
+	//////////////////
+	String *linesAdded;
+	uint *lineNumberAdded;
+	uint addedCount;
+} Diff;
+
 #define VALID_CHARS "a-zA-Z0-9._/!@&^,'( ){}-"
 
 #define getFileName(path) (strrchr(path, '/') ? strrchr(path, '/') + 1 : path)
@@ -47,6 +58,14 @@ typedef struct
 			while ((_c = fgetc(f)) != EOF && _c != '\n') \
 				_k++;                                    \
 		_k;                                              \
+	})
+
+#define SCAN_LINE_BOUNDED(f, d, cnt, end)                                                                      \
+	({                                                                                                         \
+		char *c = NULL;                                                                                        \
+		while ((c = (cnt < end || end == -1) ? (cnt++, fgets(d, sizeof(d), f)) : NULL) && isEmpty(strtrim(d))) \
+			;                                                                                                  \
+		c;                                                                                                     \
 	})
 
 /**
@@ -181,6 +200,9 @@ FileEntry getFileEntry(constString _path, constString _repopath);
 int ls(FileEntry **buf, constString path);
 
 int copyFile(constString _src, constString _dest, constString repo);
+
+Diff getDiff(constString baseFilePath, constString changedFilePath, int f1begin, int f1end, int f2begin, int f2end);
+void freeDiffStruct(Diff *diff);
 
 void freeFileEntry(FileEntry *array, uint len);
 

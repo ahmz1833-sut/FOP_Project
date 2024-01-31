@@ -3,7 +3,7 @@
 #include "phase1.h"
 #include "phase2.h"
 
-// #define __DEBUG_MODE__ "neogit add f2f"
+// #define __DEBUG_MODE__ "neogit diff -f Salam1.txt Salam2.txt -line1 1-3 -line2 2-4"
 int _err = 0;
 
 const Command cmds[] = {
@@ -13,17 +13,15 @@ const Command cmds[] = {
     {"reset", 3, 0, command_reset, CMD_RESET_USAGE},
     {"status", 2, 2, command_status, CMD_STATUS_USAGE},
     {"commit", 4, 4, command_commit, CMD_COMMIT_USAGE},
-    {"set", 6, 6, command_set, CMD_SET_USAGE},
-    {"replace", 6, 6, command_replace, CMD_REPLACE_USAGE},
-    {"remove", 4, 4, command_remove, CMD_REMOVE_USAGE},
-    {"log", 2, 4, command_log, CMD_LOG_USAGE},
+    {"set", 6, 6, command_shortcutmsg, CMD_SHORTCUT_USAGE},
+    {"replace", 6, 6, command_shortcutmsg, CMD_SHORTCUT_USAGE},
+    {"remove", 4, 4, command_remove, CMD_SHORTCUT_USAGE},
+    {"log", 2, 5, command_log, CMD_LOG_USAGE},
     {"branch", 2, 3, command_branch, CMD_BRANCH_USAGE},
     {"checkout", 3, 3, command_checkout, CMD_CHECKOUT_USAGE},
     {"revert", 3, 7, command_revert, CMD_REVERT_USAGE},
     {"tag", 2, 9, command_tag, CMD_TAG_USAGE},
-    {"tree", 2, 2, command_tree, CMD_TREE_USAGE},
     {"stash", 3, 5, command_stash, CMD_STASH_USAGE},
-    {"pre-commit", 2, 0, command_precommit, CMD_PRECOMMIT_USAGE},
     {"grep", 6, 9, command_grep, CMD_GREP_USAGE},
     {"diff", 5, 9, command_diff, CMD_DIFF_USAGE},
     {"merge", 5, 6, command_merge, CMD_MERGE_USAGE},

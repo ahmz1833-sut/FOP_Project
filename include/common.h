@@ -25,11 +25,13 @@ typedef char const *constString;
 #define ERR_ALREADY_EXIST 6
 #define ERR_MALLOC 7
 #define ERR_NOT_EXIST 8
+#define ERR_GENERAL 10
 #define ERR_UNKNOWN 100
 
 #define STR_LINE_MAX 256
 #define STR_MAX 1000
 #define STR_CMD_MAX 10000
+#define COMMIT_MSG_LEN_MAX 72
 
 #define systemf(...) ({char _cmd[STR_CMD_MAX]; sprintf(_cmd, __VA_ARGS__); system(_cmd); })
 

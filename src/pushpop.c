@@ -75,6 +75,14 @@ int backupStagingArea()
 int popStage()
 {
 	char path[PATH_MAX];
+
+	if(curRepository->stagingArea.arr)
+	{
+		free(curRepository->stagingArea.arr);
+		curRepository->stagingArea.arr = NULL;
+		curRepository->stagingArea.len = 0;
+	}
+
 	tryWithFile(infoFile, strConcatStatic(path, curRepository->absPath, "/." PROGRAM_NAME "/stage/info"),
 				({ return ERR_FILE_ERROR; }), ({ return _ERR; }))
 	{
@@ -95,7 +103,7 @@ int popStage()
 				sf = &(curRepository->stagingArea.arr[curRepository->stagingArea.len - 1]);
 				sf->file.path = strDup(filePath);
 			}
-			strConcatStatic(sf->hashedPath, "." PROGRAM_NAME "/stage/", hash);
+			strcpy(sf->hashStr, hash);
 			sf->file.dateModif = timeM;
 			sf->file.isDeleted = (strcmp("dddddddddd", hash) == 0);
 			sf->file.permission = perm;

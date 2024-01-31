@@ -6,7 +6,7 @@ String normalizePath(constString _path, constString _repoPath)
 	char buf[PATH_MAX];
 	if (realpath(_path, buf) == 0)
 	{
-		if(isMatch(_path, "/*"))
+		if (isMatch(_path, "/*"))
 			strcpy(buf, _path);
 		else
 		{
@@ -17,7 +17,10 @@ String normalizePath(constString _path, constString _repoPath)
 	absolutePath = buf;
 	if (_repoPath != NULL && strlen(_repoPath) > 1)
 	{
-		if (strstr(buf, _repoPath) == NULL) return NULL;
+		if (!strcmp(buf, _repoPath))
+			return strDup(".");
+		if (strstr(buf, _repoPath) == NULL)
+			return NULL;
 		absolutePath += strlen(_repoPath) + 1;
 		if (strlen(absolutePath) == 0)
 			strcat(absolutePath, ".");
@@ -35,7 +38,7 @@ FileEntry getFileEntry(constString _path, constString _repopath)
 	String normalizedPath = normalizePath(_path, _repopath);
 	if (!normalizedPath) // Out of repo
 		return entry;
-	
+
 	entry.path = normalizedPath;
 
 	if (access(_path, F_OK) != 0)
@@ -265,14 +268,103 @@ int copyFile(constString _src, constString _dest, constString repo)
 	}
 }
 
-typedef struct
+Diff getDiff(constString baseFilePath, constString changedFilePath, int f1begin, int f1end, int f2begin, int f2end)
 {
+	Diff diff = {NULL, NULL, 0, NULL, NULL, 0};
 
-} Diff;
+	tryWithFile(baseFile, baseFilePath, ({ return diff; }), ({ return diff; }))
+	{
+		tryWithFile(changedFile, changedFilePath, throw(0), throw(0))
+		{
+			char line1[STR_LINE_MAX], line2[STR_LINE_MAX];
+			uint line1_cnt = f1begin - 1, line2_cnt = f2begin - 1;
+			SEEK_TO_LINE(baseFile, f1begin);
+			SEEK_TO_LINE(changedFile, f2begin);
+			char* file1ReadResult = NULL;
+			while ((file1ReadResult = SCAN_LINE_BOUNDED(baseFile, line1, line1_cnt, f1end)) && SCAN_LINE_BOUNDED(changedFile, line2, line2_cnt, f2end))
+			{
+				if (strcmp(line1, line2) == 0) // if same, continue
+					continue;
+				// if not same
+				else
+				{
+					if (diff.removedCount == 0)
+					{
+						diff.linesRemoved = malloc((diff.removedCount = 1) * sizeof(String));
+						diff.lineNumberRemoved = malloc(diff.removedCount * sizeof(uint *));
+					}
+					else
+					{
+						diff.linesRemoved = realloc(diff.linesRemoved, ++(diff.removedCount) * sizeof(String));
+						diff.lineNumberRemoved = realloc(diff.lineNumberRemoved, diff.removedCount * sizeof(uint *));
+					}
+					diff.linesRemoved[diff.removedCount - 1] = strDup(line1);
+					diff.lineNumberRemoved[diff.removedCount - 1] = line1_cnt;
 
-Diff *getDiff(String path1, String path2)
+					if (diff.addedCount == 0)
+					{
+						diff.linesAdded = malloc((diff.addedCount = 1) * sizeof(String));
+						diff.lineNumberAdded = malloc(diff.addedCount * sizeof(uint *));
+					}
+					else
+					{
+						diff.linesAdded = realloc(diff.linesAdded, ++(diff.addedCount) * sizeof(String));
+						diff.lineNumberAdded = realloc(diff.lineNumberAdded, diff.addedCount * sizeof(uint *));
+					}
+					diff.linesAdded[diff.addedCount - 1] = strDup(line2);
+					diff.lineNumberAdded[diff.addedCount - 1] = line2_cnt;
+				}
+			}
+
+			while (file1ReadResult || (file1ReadResult = SCAN_LINE_BOUNDED(baseFile, line1, line1_cnt, f1end)))
+			{
+				if (diff.removedCount == 0)
+				{
+					diff.linesRemoved = malloc((diff.removedCount = 1) * sizeof(String));
+					diff.lineNumberRemoved = malloc(diff.removedCount * sizeof(uint *));
+				}
+				else
+				{
+					diff.linesRemoved = realloc(diff.linesRemoved, ++(diff.removedCount) * sizeof(String));
+					diff.lineNumberRemoved = realloc(diff.lineNumberRemoved, diff.removedCount * sizeof(uint *));
+				}
+				diff.linesRemoved[diff.removedCount - 1] = strDup(line1);
+				diff.lineNumberRemoved[diff.removedCount - 1] = line1_cnt;
+				file1ReadResult = NULL;
+			}
+
+			while (SCAN_LINE_BOUNDED(changedFile, line2, line2_cnt, f2end))
+			{
+				if (isEmpty(strtrim(line2)))
+					continue;
+
+				if (diff.addedCount == 0)
+				{
+					diff.linesAdded = malloc((diff.addedCount = 1) * sizeof(String));
+					diff.lineNumberAdded = malloc(diff.addedCount * sizeof(uint *));
+				}
+				else
+				{
+					diff.linesAdded = realloc(diff.linesAdded, ++(diff.addedCount) * sizeof(String));
+					diff.lineNumberAdded = realloc(diff.lineNumberAdded, diff.addedCount * sizeof(uint *));
+				}
+				diff.linesAdded[diff.addedCount - 1] = strDup(line2);
+				diff.lineNumberAdded[diff.addedCount - 1] = line2_cnt;
+			}
+		}
+	}
+
+	return diff;
+}
+
+void freeDiffStruct(Diff *diff)
 {
-	Diff *diff = malloc(sizeof(Diff));
-
-	return NULL;
+	if (diff->lineNumberAdded)
+		free(diff->lineNumberAdded);
+	if (diff->lineNumberRemoved)
+		free(diff->lineNumberRemoved);
+	if (diff->linesAdded)
+		free(diff->linesAdded);
+	if (diff->linesRemoved)
+		free(diff->linesRemoved);
 }

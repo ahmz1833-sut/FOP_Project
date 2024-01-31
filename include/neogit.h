@@ -24,7 +24,7 @@ typedef struct
 typedef struct
 {
     FileEntry file;
-    char hashedPath[25]; // ".neogit/stage/<10 digit hash>"
+    char hashStr[10]; // 10 digit hash
 } StagedFile;
 
 typedef struct
@@ -35,24 +35,30 @@ typedef struct
 
 typedef struct
 {
+	uint64_t hash;
+	String branch;
+	StagedFileArray headFiles;
+} HEAD;
 
+typedef struct
+{
+	uint64_t hash;
+	String username;
+	String useremail;
+	time_t time;
+	String message;
+	String branch;
+	StagedFileArray commitedFiles;
+	StagedFileArray headFiles;
+	uint64_t prev;
+	uint64_t mergedCommit;
 } Commit;
 
 typedef struct
 {
-
-} CommitArray;
-
-typedef struct
-{
-    String headCommitHash;
-    CommitArray commitList;
-} Branch;
-
-typedef struct
-{
-	Branch* arr;
-	uint len;
+	String* names;
+	uint64_t *headCommitHashs;
+	unsigned num;
 } BranchArray;
 
 typedef struct
@@ -60,6 +66,8 @@ typedef struct
     String absPath;
     StagedFileArray stagingArea;
     BranchArray branches;
+	HEAD head;
+	bool deatachedHead;
 } Repository;
 
 typedef enum

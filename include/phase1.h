@@ -40,14 +40,9 @@ int command_status(int argc, constString argv[], bool performActions);
 int command_commit(int argc, constString argv[], bool performActions);
 #define CMD_COMMIT_USAGE ""
 
-int command_set(int argc, constString argv[], bool performActions);
-#define CMD_SET_USAGE ""
-
-int command_replace(int argc, constString argv[], bool performActions);
-#define CMD_REPLACE_USAGE ""
-
+int command_shortcutmsg(int argc, constString argv[], bool performActions);
 int command_remove(int argc, constString argv[], bool performActions);
-#define CMD_REMOVE_USAGE ""
+#define CMD_SHORTCUT_USAGE ""
 
 int command_log(int argc, constString argv[], bool performActions);
 #define CMD_LOG_USAGE ""

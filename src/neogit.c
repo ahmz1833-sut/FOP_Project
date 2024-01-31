@@ -32,8 +32,8 @@ Repository *obtainRepository(constString workDir)
 			freeFileEntry(buf, count);
 			free(buf);
 
-			// If we reach root, or error in navigating to parent, break loop;
-			if (isMatch(getcwd(NULL, PATH_MAX), "/") || chdir("..") != 0)
+			// If we found repo, or reach root, or error in navigating to parent, break loop;
+			if (found || isMatch(getcwd(NULL, PATH_MAX), "/") || chdir("..") != 0)
 				break;
 		}
 
@@ -297,6 +297,7 @@ bool isGitIgnore(FileEntry *entry)
 	return entry->isDir && isMatch(getFileName(entry->path), ".git");
 }
 
+// the input path must be relative to the repo
 StagedFile *getStagedFile(constString path)
 {
 	for (int i = 0; i < curRepository->stagingArea.len; i++)
@@ -311,11 +312,11 @@ int removeFromStage(constString filePath)
 	StagedFile *sf = NULL;
 	if (!(sf = getStagedFile(filePath)))
 		return ERR_NOT_EXIST;
-	
-	if(!sf->file.isDeleted) // We must delete the staged file
-		withString(oldPath, strConcat(curRepository->absPath, "/", sf->hashedPath))
+
+	if (!sf->file.isDeleted) // We must delete the staged file
+		withString(oldPath, strConcat(curRepository->absPath, "/.neogit/stage", sf->hashStr))
 			remove(oldPath);
-	
+
 	// remove from info file
 	char path[PATH_MAX];
 	strConcatStatic(path, curRepository->absPath, "/." PROGRAM_NAME "/stage/info");
@@ -323,14 +324,18 @@ int removeFromStage(constString filePath)
 	{
 		int error = 0;
 		char pattern[STR_LINE_MAX];
-		sprintf(pattern, "%s:%ld:%u:%s", sf->file.path, sf->file.dateModif, sf->file.permission, getFileName(sf->hashedPath));
+		sprintf(pattern, "%s:%ld:%u:%s", sf->file.path, sf->file.dateModif, sf->file.permission, sf->hashStr);
 		int res = searchLine(infoFile, pattern);
 		if (res != -1)
 			error = removeLine(infoFile, res);
-		else 
+		else
 			error = ERR_NOT_EXIST;
 		throw(error);
 	}
+
+	// Refresh Structs in program
+	popStage();
+
 	return ERR_NOERR;
 }
 
@@ -344,7 +349,7 @@ int addToStage(constString filePath)
 		sf = &(curRepository->stagingArea.arr[curRepository->stagingArea.len - 1]);
 	}
 	else if (!sf->file.isDeleted)
-		withString(oldPath, strConcat(curRepository->absPath, "/", sf->hashedPath))
+		withString(oldPath, strConcat(curRepository->absPath, "/.neogit/stage", sf->hashStr))
 			remove(oldPath);
 
 	withString(absPath, strConcat(curRepository->absPath, "/", filePath))
@@ -352,16 +357,16 @@ int addToStage(constString filePath)
 
 	if (!(sf->file.isDeleted))
 	{
-		strcpy(sf->hashedPath, "." PROGRAM_NAME "/stage/");
 		withString(hash, toHexString(generateUniqueId(10), 10))
-			strcat(sf->hashedPath, hash);
-
-		int err = copyFile(sf->file.path, sf->hashedPath, curRepository->absPath);
+			strcpy(sf->hashStr, hash);
+		char hashedPath[PATH_MAX];
+		strConcatStatic(hashedPath, "." PROGRAM_NAME "/stage/", sf->hashStr);
+		int err = copyFile(sf->file.path, hashedPath, curRepository->absPath);
 		if (err)
 			return err;
 	}
 	else
-		strcpy(sf->hashedPath, "dddddddddd");
+		strcpy(sf->hashStr, "dddddddddd");
 
 	// save information to info file
 	char path[PATH_MAX];
@@ -375,7 +380,7 @@ int addToStage(constString filePath)
 		char pattern[STR_LINE_MAX];
 		sprintf(pattern, "%s:*:*:*", sf->file.path);
 		int res = searchLine(infoFile, pattern);
-		sprintf(pattern, "%s:%ld:%u:%s\n", sf->file.path, sf->file.dateModif, sf->file.permission, getFileName(sf->hashedPath));
+		sprintf(pattern, "%s:%ld:%u:%s\n", sf->file.path, sf->file.dateModif, sf->file.permission, sf->hashStr);
 		if (res != -1)
 			error = replaceLine(infoFile, res, pattern);
 		else
@@ -418,6 +423,8 @@ bool isTrackedFile(constString path)
 }
 
 //  TODO: Implement this function
+// Input paths : abs or rel to cwd
+// paths in Output buf: absolute
 int lsCombo(FileEntry **buf, constString path)
 {
 	char path_abs[PATH_MAX];
@@ -425,9 +432,11 @@ int lsCombo(FileEntry **buf, constString path)
 	return ls(buf, path);
 }
 
+// TODO : implement
+// the input path must be relative to the repo
 ChangeStatus getChangesFromHEAD(constString path)
 {
-	return 1;
+	return ADDED;
 }
 
 // the input path must be relative to the repo
@@ -463,5 +472,86 @@ ChangeStatus getChangesFromStaging(constString path)
 			return PERM_CHANGED;
 		else
 			return NOT_CHANGED;
+	}
+}
+
+
+// fromWhere : e.g. : ".neogit/stage"
+Commit *createCommit(StagedFileArray *filesToCommit, String fromWhere, String username, String email, String message)
+{
+	if (curRepository->deatachedHead)
+		return NULL;
+
+	HEAD *head = &(curRepository->head);
+	Commit *newCommit = malloc(sizeof(Commit));
+	newCommit->hash = generateUniqueId(6);
+	newCommit->prev = head->hash;
+	newCommit->branch = head->branch;
+	newCommit->message = strDup(message);
+	newCommit->username = strDup(username);
+	newCommit->useremail = strDup(email);
+	newCommit->time = time(NULL);
+	newCommit->mergedCommit = 0;
+	newCommit->commitedFiles = *filesToCommit;
+	newCommit->headFiles = curRepository->head.headFiles;
+
+	// Update head files
+	for (int i = 0; i < curRepository->head.headFiles.len; i++)
+	{
+
+	}
+
+	// Copy objects from src to .neogit/objects
+
+
+	// Update head hash
+	curRepository->head.hash = newCommit->hash;
+
+	char commitPath[PATH_MAX];
+	sprintf(commitPath, "%s/.neogit/commits/%06lx", curRepository->absPath, newCommit->hash);
+	systemf("touch \"%s\"", commitPath);
+	tryWithFile(commitFile, commitPath, ({ return NULL; }), ({ return NULL; }))
+	{
+		// Commit File Structure:
+		// Line 1 : "<username>:<email>:<time>:<branch>"
+		// Line 2 : "[perv]:<pervHash>" or  "[perv]:<pervHash>:[merged]:<mergedHash>"
+		// Line 3 : "[message]:[<message>]"
+		// Line 4 : "[<a>]:[<b>]"   // a : number of commit files , b : number of head files
+		// Line 5 -> 4+a : Commited files (same format with staging info)
+		// Line 5+a : \n
+		// Line 6+a -> 5+a+b : HEAD files (same format with staging info)
+		fprintf(commitFile, "%s:%s:%ld:%s\n", newCommit->useremail, newCommit->useremail, newCommit->time, newCommit->branch);
+		fprintf(commitFile, "[perv]:%06lx\n", newCommit->prev);
+		fprintf(commitFile, "[message]:[%s]\n", message);
+		fprintf(commitFile, "[%u]:[%u]\n", newCommit->commitedFiles.len, newCommit->headFiles.len);
+		for (int i = 0; i < newCommit->commitedFiles.len; i++)
+		{
+			StagedFile *sf = &(newCommit->commitedFiles.arr[i]);
+			// <path>:<timeModif>:<perm>:<10digitHash>
+			fprintf(commitFile, "%s:%ld:%u:%s", sf->file.path, sf->file.dateModif, sf->file.permission, sf->hashStr);
+		}
+		fputs("\n", commitFile);
+		for (int i = 0; i < newCommit->headFiles.len; i++)
+		{
+			StagedFile *sf = &(newCommit->headFiles.arr[i]);
+			// <path>:<timeModif>:<perm>:<10digitHash>
+			fprintf(commitFile, "%s:%ld:%u:%s", sf->file.path, sf->file.dateModif, sf->file.permission, sf->hashStr);
+		}
+	}
+
+	return newCommit;
+}
+
+Commit *getCommit(uint64_t hash)
+{
+	char commitPath[PATH_MAX];
+	sprintf(commitPath, "%s/.neogit/commits/%06lx", curRepository->absPath, hash);
+	tryWithFile(commitFile, commitPath, ({ return NULL; }), ({ return NULL; }))
+	{
+		Commit *commit = malloc(sizeof(Commit));
+
+		// fscanf("")
+
+		// 	return commit;
 	}
 }

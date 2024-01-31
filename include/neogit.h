@@ -62,6 +62,16 @@ typedef struct
     BranchArray branches;
 } Repository;
 
+typedef enum
+{
+	NOT_CHANGED = 0,
+	MODIFIED,
+	ADDED,
+	DELETED,
+	PERM_CHANGED
+} ChangeStatus;
+
+
 #define checkArgument(num, cmd) (argc >= (num) + 1 && isMatch(argv[num], cmd))
 #define checkArgumentPure(num, cmd) (argc == num + 1 && isMatch(argv[num], cmd))
 #define checkAnyArgument(cmd)                \
@@ -171,11 +181,16 @@ int removeConfig(constString key, bool global);
  */
 int getAliases(String *keysDest);
 bool isGitIgnore(FileEntry *entry);
-int removeFromStage(StagedFile *sf);
-int addToStage(FileEntry *file);
-int trackFile(String filepath);
+int removeFromStage(constString filePath);
+int addToStage(constString filePath);
+int trackFile(constString filepath);
+
+FileEntry getRepoFileEntry(constString path);
+int lsCombo(FileEntry** buf, constString path);
+
 StagedFile *getStagedFile(constString path);
-bool isTrackedFile(String path);
-bool isChangedStaging(String path);
+bool isTrackedFile(constString path);
+ChangeStatus getChangesFromHEAD(constString path);
+ChangeStatus getChangesFromStaging(constString path);
 
 #endif

@@ -305,35 +305,68 @@ StagedFile *getStagedFile(constString path)
 	return NULL;
 }
 
-int removeFromStage(StagedFile *sf)
-{
-}
-
-int addToStage(FileEntry *file)
+// the input path must be relative to the repo
+int removeFromStage(constString filePath)
 {
 	StagedFile *sf = NULL;
-	if (!(sf = getStagedFile(file->path)))
+	if (!(sf = getStagedFile(filePath)))
+		return ERR_NOT_EXIST;
+	
+	if(!sf->file.isDeleted) // We must delete the staged file
+		withString(oldPath, strConcat(curRepository->absPath, "/", sf->hashedPath))
+			remove(oldPath);
+	
+	// remove from info file
+	char path[PATH_MAX];
+	strConcatStatic(path, curRepository->absPath, "/." PROGRAM_NAME "/stage/info");
+	tryWithFile(infoFile, path, ({ return ERR_FILE_ERROR; }), ({ return _ERR; }))
+	{
+		int error = 0;
+		char pattern[STR_LINE_MAX];
+		sprintf(pattern, "%s:%ld:%u:%s", sf->file.path, sf->file.dateModif, sf->file.permission, getFileName(sf->hashedPath));
+		int res = searchLine(infoFile, pattern);
+		if (res != -1)
+			error = removeLine(infoFile, res);
+		else 
+			error = ERR_NOT_EXIST;
+		throw(error);
+	}
+	return ERR_NOERR;
+}
+
+// the input path must be relative to the repo
+int addToStage(constString filePath)
+{
+	StagedFile *sf = NULL;
+	if (!(sf = getStagedFile(filePath)))
 	{
 		ADD_EMPTY(curRepository->stagingArea, StagedFile);
 		sf = &(curRepository->stagingArea.arr[curRepository->stagingArea.len - 1]);
 	}
-	else
+	else if (!sf->file.isDeleted)
 		withString(oldPath, strConcat(curRepository->absPath, "/", sf->hashedPath))
 			remove(oldPath);
 
-	sf->file = getFileEntry(file->path, curRepository->absPath);
-	strcpy(sf->hashedPath, "." PROGRAM_NAME "/stage/");
-	withString(hash, toHexString(generateUniqueId(10), 10))
-		strcat(sf->hashedPath, hash);
+	withString(absPath, strConcat(curRepository->absPath, "/", filePath))
+		sf->file = getFileEntry(absPath, curRepository->absPath);
 
-	int err = copyFile(file->path, sf->hashedPath, curRepository->absPath);
-	if (err)
-		return err;
+	if (!(sf->file.isDeleted))
+	{
+		strcpy(sf->hashedPath, "." PROGRAM_NAME "/stage/");
+		withString(hash, toHexString(generateUniqueId(10), 10))
+			strcat(sf->hashedPath, hash);
 
+		int err = copyFile(sf->file.path, sf->hashedPath, curRepository->absPath);
+		if (err)
+			return err;
+	}
+	else
+		strcpy(sf->hashedPath, "dddddddddd");
+
+	// save information to info file
 	char path[PATH_MAX];
 	strConcatStatic(path, curRepository->absPath, "/." PROGRAM_NAME "/stage/info");
-	withString(touchCmd, strConcat("touch \"", path, "\""))
-		system(touchCmd);
+	systemf("touch \"%s\"", path);
 
 	// add to info file
 	tryWithFile(infoFile, path, ({ return ERR_FILE_ERROR; }), ({ return _ERR; }))
@@ -352,7 +385,8 @@ int addToStage(FileEntry *file)
 	return ERR_NOERR;
 }
 
-int trackFile(String filepath)
+// the input path must be relative to the repo
+int trackFile(constString filepath)
 {
 	if (isTrackedFile(filepath))
 		return ERR_NOERR;
@@ -368,7 +402,8 @@ int trackFile(String filepath)
 	return ERR_NOERR;
 }
 
-bool isTrackedFile(String path)
+// the input path must be relative to the repo
+bool isTrackedFile(constString path)
 {
 	char manifestFilePath[PATH_MAX];
 	strConcatStatic(manifestFilePath, curRepository->absPath, "/." PROGRAM_NAME "/tracked");
@@ -376,26 +411,57 @@ bool isTrackedFile(String path)
 	tryWithFile(manifestFile, manifestFilePath, ({ return ERR_FILE_ERROR; }), ({ return _ERR; }))
 	{
 		char buf[PATH_MAX];
-		while(fgets(buf, sizeof(buf), manifestFile)!=NULL)
-			if(isMatch(buf, path))
+		while (fgets(buf, sizeof(buf), manifestFile) != NULL)
+			if (isMatch(buf, path))
 				return true;
 	}
 }
 
-bool isChangedStaging(String path)
+//  TODO: Implement this function
+int lsCombo(FileEntry **buf, constString path)
 {
-	StagedFile *sf = NULL;
-	if (!(sf = getStagedFile(path)))
-		return true;
+	char path_abs[PATH_MAX];
+	// return ls(buf, strConcatStatic(path_abs, curRepository->absPath, "/", path));
+	return ls(buf, path);
+}
 
-	FileEntry fe = getFileEntry(path, curRepository->absPath);
-	if (fe.path == NULL) // Handle Deleted file
-		return true;
-	freeFileEntry(&fe, 1);
+ChangeStatus getChangesFromHEAD(constString path)
+{
+	return 1;
+}
 
-	bool contentChanged = true;
-	if (sf->file.dateModif == fe.dateModif)
-		contentChanged = false;
+// the input path must be relative to the repo
+ChangeStatus getChangesFromStaging(constString path)
+{
+	StagedFile *stage = getStagedFile(path);
+	char abspath[PATH_MAX];
+	strConcatStatic(abspath, curRepository->absPath, "/", path);
+	if (access(abspath, F_OK) != 0) // File Not Exist
+	{
+		if (stage == NULL)
+			return getChangesFromHEAD(path);
+		if (!(stage->file.isDeleted)) // Th real file staged before!
+			return DELETED;			  // but it's deleted from working dir
+		else
+			return NOT_CHANGED; // Deleted and Staged before!
+	}
 
-	return contentChanged || (fe.permission != sf->file.permission);
+	// real File is exist!
+
+	if (!isTrackedFile(path)) // Untracked File
+		return ADDED;
+	else if (stage == NULL)
+		return getChangesFromHEAD(path);
+	else // staged file and real file are present! compare them.
+	{
+		// absolute
+		FileEntry realFile = getFileEntry(abspath, NULL);
+		freeFileEntry(&realFile, 1);
+		if (realFile.dateModif != stage->file.dateModif)
+			return MODIFIED;
+		else if (realFile.permission != stage->file.permission)
+			return PERM_CHANGED;
+		else
+			return NOT_CHANGED;
+	}
 }

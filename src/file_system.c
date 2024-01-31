@@ -3,49 +3,69 @@
 String normalizePath(constString _path, constString _repoPath)
 {
 	String absolutePath = NULL;
-	tryWithString(buf, malloc(PATH_MAX), ({ return NULL; }), ({ return NULL; }))
+	char buf[PATH_MAX];
+	if (realpath(_path, buf) == 0)
 	{
-		if (realpath(_path, buf) == 0)
-			throw(0);
-		absolutePath = buf;
-		if (_repoPath != NULL && strlen(_repoPath) > 1)
+		if(isMatch(_path, "/*"))
+			strcpy(buf, _path);
+		else
 		{
-			if (strstr(buf, _repoPath) == NULL)
-				throw(0);
-			absolutePath += strlen(_repoPath) + 1;
-			if (strlen(absolutePath) == 0)
-				strcat(absolutePath, ".");
+			getcwd(buf, PATH_MAX);
+			strcat(buf, _path);
 		}
-		absolutePath = strDup(absolutePath);
 	}
-	return absolutePath;
+	absolutePath = buf;
+	if (_repoPath != NULL && strlen(_repoPath) > 1)
+	{
+		if (strstr(buf, _repoPath) == NULL) return NULL;
+		absolutePath += strlen(_repoPath) + 1;
+		if (strlen(absolutePath) == 0)
+			strcat(absolutePath, ".");
+	}
+	return strDup(absolutePath);
 }
 
+// input path must be absolute or relative to cwd!!
+// The path in returned FileEntry is relative to Repo root
 FileEntry getFileEntry(constString _path, constString _repopath)
 {
 	FileEntry entry;
 	entry.path = NULL;
 
 	String normalizedPath = normalizePath(_path, _repopath);
-	if (!normalizedPath)
-		goto err;
-
-	struct stat _fs;
-	stat(_path, &_fs);
-
+	if (!normalizedPath) // Out of repo
+		return entry;
+	
 	entry.path = normalizedPath;
-	entry.fileSize = _fs.st_size;
-	entry.dateModif = _fs.st_mtime;
-	entry.isDir = S_ISDIR(_fs.st_mode);
-	entry.isDeleted = 0;
-	entry.permission = _fs.st_mode & 0x1FF;
-err:
+
+	if (access(_path, F_OK) != 0)
+	{
+		// Not exist
+		entry.isDeleted = 1;
+		entry.dateModif = 0;
+		entry.isDir = 0;
+		entry.permission = 0;
+	}
+	else
+	{
+		struct stat _fs;
+		stat(_path, &_fs);
+
+		entry.path = normalizedPath;
+		entry.dateModif = _fs.st_mtime;
+		entry.isDir = S_ISDIR(_fs.st_mode);
+		entry.isDeleted = 0;
+		entry.permission = _fs.st_mode & 0x1FF;
+	}
+
 	return entry;
 }
 
+// input path must be absolute or relative to cwd
+// list the childs into a dir, put into buf. (buf paths are absolute)
 int ls(FileEntry **buf, constString _path)
 {
-	tryWithString(path, normalizePath(_path, "/"), ({ return -1; }), ({ return _ERR; }))
+	tryWithString(path, normalizePath(_path, ""), ({ return -1; }), ({ return _ERR; }))
 	{
 		// if Path not exist
 		if (access(path, F_OK) != 0)
@@ -128,7 +148,7 @@ int searchLine(FILE *file, constString pattern)
 			rewind(file);
 			return lineNum;
 		}
-	
+
 	return -1;
 }
 
@@ -218,9 +238,9 @@ int copyFile(constString _src, constString _dest, constString repo)
 	char src[PATH_MAX], dest[PATH_MAX];
 	strConcatStatic(src, repo, "/", _src);
 	strConcatStatic(dest, repo, "/", _dest);
-	
+
 	char dir[PATH_MAX];
-	systemf("mkdir -p \"%s\"", getDirName(dir, dest));
+	systemf("mkdir -p \"%s\"", getParentName(dir, dest));
 	systemf("touch \"%s\"", dest);
 
 	tryWithFile(srcFile, src, ({ return ERR_FILE_ERROR; }), ({ return _ERR; }))

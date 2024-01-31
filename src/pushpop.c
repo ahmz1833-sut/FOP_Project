@@ -18,8 +18,10 @@ int restoreStageingBackup()
 	freeFileEntry(buf, res);
 	
 	// remove the top stack
+	char stagePath[PATH_MAX];
+	strcpy(stagePath, tmp);
 	strcat(tmp, "/old0");
-	systemf("mv \"%s/*\" ..", tmp); // move back all backed up files
+	systemf("mv \"%s\"/* \"%s\" 2>/dev/null", tmp, stagePath); // move back all backed up files
 	systemf("rm -r \"%s\"", tmp); // remove backup folder
 
 	for (int i = 1; i <= 9; i++)
@@ -60,6 +62,7 @@ int backupStagingArea()
 	int res = ls(&buf, tmp);
 	int error = 0;
 	strcat(tmp, "/old0");
+	mkdir(tmp, 0775);
 	for (int i = 0; i < res; i++)
 		if (!buf[i].isDir)
 			withString(dest, strConcat(tmp, "/", getFileName(buf[i].path)))

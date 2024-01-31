@@ -4,6 +4,7 @@
 extern String curWorkingDir;      // Declared in neogit.c
 extern Repository *curRepository; // Declared in neogit.c
 
+// root path must be absolute / list function must accept abs path and return abs path / relative path to repo passed to print function
 void printTree(FileEntry *root, uint curDepth, int (*listFunction)(FileEntry **, constString), void (*printFunction)(FileEntry *))
 {
     bool isLastBefore[16];
@@ -19,7 +20,7 @@ void printTree(FileEntry *root, uint curDepth, int (*listFunction)(FileEntry **,
     if (maxDepth < curDepth) // First call
     {
         maxDepth = curDepth;
-        // calculate relative path of root based on repository path
+        // calculate relative path
         FileEntry fe = getFileEntry(root->path, curRepository->absPath);
         printFunction(&fe);
         freeFileEntry(&fe, 1);
@@ -42,14 +43,16 @@ void printTree(FileEntry *root, uint curDepth, int (*listFunction)(FileEntry **,
                 printf("├── ");
         }
 
-        printFunction(&array[i]);
-        if (array[i].isDir && curDepth > 1)
+        FileEntry relativeToRepo = getFileEntry(array[i].path, curRepository->absPath);
+        printFunction(&relativeToRepo);
+        if (array[i].isDir && curDepth > 1 && !isMatch(relativeToRepo.path, ".neogit"))
         {
             uint passedInt = curDepth - 1;
             for (int i = 4; i < 20; i++)
                 passedInt |= (isLastBefore[i - 4] ? (1 << i) : 0);
             printTree(&array[i], passedInt, listFunction, printFunction);
         }
+        freeFileEntry(&relativeToRepo, 1);
     }
     freeFileEntry(array, num);
     free(array);
@@ -57,14 +60,16 @@ void printTree(FileEntry *root, uint curDepth, int (*listFunction)(FileEntry **,
 
 void printStagedStatus(FileEntry *element)
 {
-    if (element->isDir)
-    {
+    if (isMatch(element->path, ".neogit")) // .neogit Directory
+        printf(_MAGNTA _BOLD ".neogit" _UNBOLD " (NeoGIT Directory)\n" _RST);
+    else if (element->isDir) // Directory
         printf(_BLU _BOLD "%s" _UNBOLD " (dir)\n" _RST, getFileName(element->path));
-    }
-    else
-    {
-        printf("%s\n", getFileName(element->path));
-    }
+    else if (!isTrackedFile(element->path)) // Untracked
+        printf(_GRN _BOLD "%s" _UNBOLD " → Untraked\n" _RST, getFileName(element->path));
+    else if (getChangesFromStaging(element->path)) // Unstaged (Modified)
+        printf(_YEL _BOLD "%s" _UNBOLD " → Modified\n" _RST, getFileName(element->path));
+    else // Staged
+        printf(_BOLD "%s" _UNBOLD " → Staged\n" _RST, getFileName(element->path));
 }
 
 int command_init(int argc, constString argv[], bool performActions)
@@ -198,6 +203,23 @@ int command_add(int argc, constString argv[], bool performActions)
         else if (!performActions)
             return ERR_NOERR;
 
+        char tracklistFilePath[PATH_MAX];
+        strConcatStatic(tracklistFilePath, curRepository->absPath, "/." PROGRAM_NAME "/tracked");
+        systemf("touch \"%s\"", tracklistFilePath);
+        tryWithFile(manifestFile, tracklistFilePath, ({ return ERR_FILE_ERROR; }), ({ return _ERR; }))
+        {
+            char buf[PATH_MAX];
+            while (fgets(buf, sizeof(buf), manifestFile) != NULL)
+                if (getChangesFromStaging(strtrim(buf)))
+                {
+                    int res = addToStage(buf);
+                    if (res == ERR_NOERR)
+                        printf("Modified file restaged: " _CYAN "%s \n"_RST, buf);
+                    else
+                        printError("Error! in adding file: " _BOLD "%s" _UNBOLD ".\n", buf);
+                }
+        }
+
         return ERR_NOERR;
     }
 
@@ -231,6 +253,7 @@ int command_add(int argc, constString argv[], bool performActions)
     while (argc--)
     {
         constString argument = *(argv++);
+        // dest will be absolute path or relative to cwd
         char dest[PATH_MAX];
         uint illegal = strValidate(dest, argument, VALID_CHARS);
         strtrim(dest);
@@ -238,18 +261,20 @@ int command_add(int argc, constString argv[], bool performActions)
         if (illegal || !*dest)
         {
             printWarning("File or directory " _BOLD "\"%s\"" _UNBOLD " has illegal characters! It has been ignored.", argument);
-            throw(0);
+            continue;
         }
 
+        // entry paths will be absolute
         FileEntry *entries = NULL;
-        int result = ls(&entries, dest); // TODO: Change to lsWDirAndHead()
-        if (result == -1)                // error
+        int result = lsCombo(&entries, dest);
+        if (result == -1) // error
             printError("Error! " _BOLD "\"%s\"" _UNBOLD " : No such file or directory!", argument);
         else if (result == -2) // add file
         {
-            FileEntry fileE = getFileEntry(dest, curRepository->absPath); // TODO: Chnage to handle notexist files
+            // relative to the repo
+            FileEntry fileE = getFileEntry(dest, curRepository->absPath);
 
-            if (fileE.path == NULL) // TODO: Handle deleted file
+            if (fileE.path == NULL)
                 printError("Error in adding File " _BOLD "\"%s\"" _UNBOLD, argument);
             else
             {
@@ -257,18 +282,18 @@ int command_add(int argc, constString argv[], bool performActions)
                 if (isGitIgnore(&fileE))
                     continue;
                 int res = 0;
-                trackFile(fileE.path);
-                if (isChangedStaging(fileE.path))
+                if (getChangesFromStaging(fileE.path))
                 {
-                    res = addToStage(&fileE);
+                    trackFile(fileE.path);
+                    res = addToStage(fileE.path);
                     if (res == ERR_NOERR)
-                        printf("File Added to stage: " _CYAN "%s " _YEL "%s\n"_RST, fileE.path, getStagedFile(fileE.path)->hashedPath);
+                        printf("File Added to stage: " _CYAN "%s " _RST "\n", fileE.path);
                     else
                         printError("Error! in adding file: " _BOLD "%s" _UNBOLD ".\n", fileE.path);
                 }
                 else
                 {
-                    printf(_DIM "File already staged: %s\n" _RST, fileE.path);
+                    printf(_DIM "No changed! already staged: %s\n" _RST, fileE.path);
                 }
                 freeFileEntry(&fileE, 1);
             }
@@ -316,6 +341,8 @@ int command_reset(int argc, constString argv[], bool performActions)
         int res = restoreStageingBackup();
         if (res == ERR_NOERR)
             printf("The last staged files, have been unstaged successfully.\n");
+        else if (res == ERR_NOT_EXIST)
+            printWarning("No recent added file to undo.");
         else
             printError("Error : in restoring stage backup.");
         return res;
@@ -347,6 +374,7 @@ int command_reset(int argc, constString argv[], bool performActions)
     while (argc--)
     {
         constString argument = *(argv++);
+        // dest will be absolute or relative to cwd
         char dest[PATH_MAX];
         uint illegal = strValidate(dest, argument, VALID_CHARS);
         strtrim(dest);
@@ -354,35 +382,35 @@ int command_reset(int argc, constString argv[], bool performActions)
         if (illegal || !*dest)
         {
             printWarning("File or directory " _BOLD "\"%s\"" _UNBOLD " has illegal characters! It has been ignored.", argument);
-            throw(0);
+            continue;
         }
 
+        // entry paths will be absolute
         FileEntry *entries = NULL;
-        int result = ls(&entries, dest); // TODO: Change to lsWDirAndHead()
-        if (result == -1)                // error
+        int result = lsCombo(&entries, dest);
+        if (result == -1) // error
             printError("Error! " _BOLD "\"%s\"" _UNBOLD " : No such file or directory!", argument);
-        else if (result == -2) // add file
+        else if (result == -2) // reset file
         {
-            FileEntry fileE = getFileEntry(dest, curRepository->absPath); // TODO: Chnage to handle notexist files
+            // relative to the repo
+            FileEntry fileE = getFileEntry(dest, curRepository->absPath);
 
-            if (fileE.path == NULL) // TODO: Handle deleted file
+            if (fileE.path == NULL)
                 printError("Error in adding File " _BOLD "\"%s\"" _UNBOLD, argument);
             else
             {
+                // .gitignore patterns are handled here.
+                if (isGitIgnore(&fileE))
+                    continue;
+                
                 int res = 0;
-                StagedFile *sf = getStagedFile(fileE.path);
-                if (sf)
-                {
-                    res = removeFromStage(sf);
-                    if (res == ERR_NOERR)
-                        printf("File Added to stage: " _CYAN "%s " _YEL "%s\n"_RST, fileE.path, getStagedFile(fileE.path)->hashedPath);
-                    else
-                        printError("Error! in adding file: " _BOLD "%s" _UNBOLD ".\n", fileE.path);
-                }
+                res = removeFromStage(fileE.path);
+                if (res == ERR_NOERR)
+                    printf("File removed from stage: " _CYAN "%s\n" _RST, fileE.path);
+                else if (res == ERR_NOT_EXIST)
+                    printf(_DIM "Not staged: %s\n" _RST, fileE.path);
                 else
-                {
-                    printf(_DIM "File already staged: %s\n" _RST, fileE.path);
-                }
+                    printError("Error! in removing file: " _BOLD "%s" _UNBOLD ".\n", fileE.path);
                 freeFileEntry(&fileE, 1);
             }
         }
@@ -393,10 +421,20 @@ int command_reset(int argc, constString argv[], bool performActions)
             new_argv[1] = "-ff";
             int new_argc = 2;
             for (int i = 0; i < result; i++)
-                new_argv[new_argc++] = entries[i].path;
+            {
+                // Don't Process .neogit folder!
+                if (entries[i].isDir && strcmp(getFileName(entries[i].path), "." PROGRAM_NAME) == 0)
+                    continue;
 
-            // Add childs recursive
-            command_add(new_argc, (constString *)new_argv, true);
+                // .gitignore patterns are handled here.
+                if (isGitIgnore(&entries[i]))
+                    continue;
+
+                new_argv[new_argc++] = entries[i].path;
+            }
+
+            // remove childs recursive
+            command_reset(new_argc, (constString *)new_argv, true);
             freeFileEntry(entries, result);
             if (result)
                 free(entries);

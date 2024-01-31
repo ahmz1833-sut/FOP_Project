@@ -15,7 +15,6 @@
 typedef struct
 {
 	String path;
-	size_t fileSize;
 	time_t dateModif;
 	uint permission : 9;
 	unsigned isDir : 1;
@@ -25,7 +24,7 @@ typedef struct
 #define VALID_CHARS "a-zA-Z0-9._/!@&^,'( ){}-"
 
 #define getFileName(path) (strrchr(path, '/') ? strrchr(path, '/') + 1 : path)
-#define getDirName(dest, path) ({char* s=strrchr(path, '/'); int _idx = s?s-path:0; strncpy(dest,path,_idx); dest[_idx]='\0'; dest; })
+#define getParentName(dest, path) ({char* s=strrchr(path, '/'); int _idx = s?s-path:0; strncpy(dest,path,_idx); dest[_idx]='\0'; dest; })
 
 /**
  * @brief Move the file cursor to a specific line number

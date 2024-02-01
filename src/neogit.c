@@ -5,7 +5,7 @@ String curWorkingDir = NULL;
 // Global variable for current repository (Used in other c files - valued in begining of main())
 Repository *curRepository = NULL;
 
-Repository *obtainRepository(constString workDir)
+int obtainRepository(constString workDir)
 {
 	// Declare variable to store the repository path
 	String repoPath = NULL;
@@ -42,14 +42,22 @@ Repository *obtainRepository(constString workDir)
 	}
 	if (repoPath)
 	{
-		Repository *repo = (Repository *)malloc(sizeof(Repository));
-		repo->absPath = repoPath;
-		repo->stagingArea.len = 0;
-		repo->stagingArea.arr = NULL;
-		return repo;
+		curRepository = (Repository *)malloc(sizeof(Repository));
+		curRepository->absPath = repoPath;
+		curRepository->stagingArea.len = 0;
+		curRepository->stagingArea.arr = NULL;
+		curRepository->deatachedHead = false;
+		curRepository->head.branch = NULL;
+		curRepository->head.hash = 0xFFFFFF;
+		curRepository->head.headFiles.arr = NULL;
+		curRepository->head.headFiles.len = 0;
+
+		popStage();
+		popHead();
+		return ERR_NOERR;
 	}
 	else
-		return NULL;
+		return ERR_NOREPO;
 }
 
 /**
@@ -334,7 +342,7 @@ int removeFromStage(constString filePath)
 	}
 
 	// Refresh Structs in program
-	popStage();
+	popStage(curRepository);
 
 	return ERR_NOERR;
 }
@@ -371,6 +379,7 @@ int addToStage(constString filePath)
 	// save information to info file
 	char path[PATH_MAX];
 	strConcatStatic(path, curRepository->absPath, "/." PROGRAM_NAME "/stage/info");
+	systemf("mkdir -p \"%s/.neogit/stage\"", curRepository->absPath);
 	systemf("touch \"%s\"", path);
 
 	// add to info file
@@ -475,8 +484,66 @@ ChangeStatus getChangesFromStaging(constString path)
 	}
 }
 
+int setBranchHead(constString branchName, uint64_t commitHash)
+{
+	char path[PATH_MAX];
+	strConcatStatic(path, curRepository->absPath, "/.neogit/branches");
+	systemf("touch \"%s\"", path);
+	tryWithFile(branchesFile, path, ({ return ERR_FILE_ERROR; }), ({ return _ERR; }))
+	{
+		char content[STR_LINE_MAX];
+		sprintf(content, "%s:*", branchName);
+		int result = searchLine(branchesFile, content);
+		sprintf(content, "%s:%06lx\n", branchName, commitHash);
+		if (result == -1)
+			result = !fputs(content, freopen(path, "a+", branchesFile));
+		else
+			result = replaceLine(branchesFile, result, content);
+		throw(result);
+	}
+}
 
-// fromWhere : e.g. : ".neogit/stage"
+uint64_t getBranchHead(constString branchName)
+{
+	char path[PATH_MAX];
+	strConcatStatic(path, curRepository->absPath, "/.neogit/branches");
+	systemf("touch \"%s\"", path);
+	tryWithFile(branchesFile, path, ({ return ERR_FILE_ERROR; }), ({ return _ERR; }))
+	{
+		char pattern[STR_LINE_MAX];
+		sprintf(pattern, "%s:*", branchName);
+		int result = searchLine(branchesFile, pattern);
+		if (result == -1)
+			throw(0xFFFFFF);
+		else
+		{
+			uint64_t hash = 0;
+			SEEK_TO_LINE(branchesFile, result);
+			strConcatStatic(pattern, branchName, ":%lx");
+			fscanf(branchesFile, pattern, &hash);
+			if (hash == 0)
+				hash = 0xFFFFFF;
+			throw(hash);
+		}
+	}
+}
+
+int listBranches(String *namesDest, uint64_t *hashesDest)
+{
+	int brCount = -1;
+	char path[PATH_MAX];
+	strConcatStatic(path, curRepository->absPath, "/.neogit/branches");
+	systemf("touch \"%s\"", path);
+	tryWithFile(branchesFile, path, ({ return -1; }), ({ return _ERR; }))
+	{
+		do
+			namesDest[++brCount] = malloc(STR_LINE_MAX);
+		while (fscanf(branchesFile, "%[^:]:%lx\n", namesDest[brCount], hashesDest + brCount) != EOF);
+		throw(brCount);
+	}
+}
+
+// fromWhere : e.g. : "stage"
 Commit *createCommit(StagedFileArray *filesToCommit, String fromWhere, String username, String email, String message)
 {
 	if (curRepository->deatachedHead)
@@ -492,23 +559,41 @@ Commit *createCommit(StagedFileArray *filesToCommit, String fromWhere, String us
 	newCommit->useremail = strDup(email);
 	newCommit->time = time(NULL);
 	newCommit->mergedCommit = 0;
+
+	// Update head files
+	for (int i = 0; i < filesToCommit->len; i++)
+	{
+		StagedFile *sf = &(filesToCommit->arr[i]);
+		bool found = false;
+		for (int j = 0; j < curRepository->head.headFiles.len; j++)
+		{
+			if (!strcmp(curRepository->head.headFiles.arr[j].file.path, sf->file.path))
+			{
+				found = true;
+				curRepository->head.headFiles.arr[j] = *sf;
+			}
+		}
+		if (!found)
+		{
+			ADD_EMPTY(curRepository->head.headFiles, StagedFile);
+			curRepository->head.headFiles.arr[curRepository->head.headFiles.len - 1] = *sf;
+		}
+	}
+
 	newCommit->commitedFiles = *filesToCommit;
 	newCommit->headFiles = curRepository->head.headFiles;
 
-	// Update head files
-	for (int i = 0; i < curRepository->head.headFiles.len; i++)
+	// copy objects from (fromWhere) to .neogit/objects
+	for (int i = 0; i < filesToCommit->len; i++)
 	{
-
+		char p1[PATH_MAX], p2[PATH_MAX];
+		copyFile(strConcatStatic(p1, ".neogit/", fromWhere, "/", filesToCommit->arr[i].hashStr),
+				 strConcatStatic(p2, ".neogit/objects/", filesToCommit->arr[i].hashStr), curRepository->absPath);
 	}
-
-	// Copy objects from src to .neogit/objects
-
-
-	// Update head hash
-	curRepository->head.hash = newCommit->hash;
 
 	char commitPath[PATH_MAX];
 	sprintf(commitPath, "%s/.neogit/commits/%06lx", curRepository->absPath, newCommit->hash);
+	systemf("mkdir -p \"%s/.neogit/commits\"", curRepository->absPath);
 	systemf("touch \"%s\"", commitPath);
 	tryWithFile(commitFile, commitPath, ({ return NULL; }), ({ return NULL; }))
 	{
@@ -520,7 +605,7 @@ Commit *createCommit(StagedFileArray *filesToCommit, String fromWhere, String us
 		// Line 5 -> 4+a : Commited files (same format with staging info)
 		// Line 5+a : \n
 		// Line 6+a -> 5+a+b : HEAD files (same format with staging info)
-		fprintf(commitFile, "%s:%s:%ld:%s\n", newCommit->useremail, newCommit->useremail, newCommit->time, newCommit->branch);
+		fprintf(commitFile, "%s:%s:%ld:%s\n", newCommit->username, newCommit->useremail, newCommit->time, newCommit->branch);
 		fprintf(commitFile, "[perv]:%06lx\n", newCommit->prev);
 		fprintf(commitFile, "[message]:[%s]\n", message);
 		fprintf(commitFile, "[%u]:[%u]\n", newCommit->commitedFiles.len, newCommit->headFiles.len);
@@ -528,30 +613,115 @@ Commit *createCommit(StagedFileArray *filesToCommit, String fromWhere, String us
 		{
 			StagedFile *sf = &(newCommit->commitedFiles.arr[i]);
 			// <path>:<timeModif>:<perm>:<10digitHash>
-			fprintf(commitFile, "%s:%ld:%u:%s", sf->file.path, sf->file.dateModif, sf->file.permission, sf->hashStr);
+			fprintf(commitFile, "%s:%ld:%u:%s\n", sf->file.path, sf->file.dateModif, sf->file.permission, sf->hashStr);
 		}
 		fputs("\n", commitFile);
 		for (int i = 0; i < newCommit->headFiles.len; i++)
 		{
 			StagedFile *sf = &(newCommit->headFiles.arr[i]);
 			// <path>:<timeModif>:<perm>:<10digitHash>
-			fprintf(commitFile, "%s:%ld:%u:%s", sf->file.path, sf->file.dateModif, sf->file.permission, sf->hashStr);
+			fprintf(commitFile, "%s:%ld:%u:%s\n", sf->file.path, sf->file.dateModif, sf->file.permission, sf->hashStr);
 		}
 	}
+
+	// Update head hash
+	curRepository->head.hash = newCommit->hash;
+	// Update current branch head
+	setBranchHead(newCommit->branch, newCommit->hash);
 
 	return newCommit;
 }
 
 Commit *getCommit(uint64_t hash)
 {
+	Commit *dynamic_allocated_commit = NULL;
 	char commitPath[PATH_MAX];
 	sprintf(commitPath, "%s/.neogit/commits/%06lx", curRepository->absPath, hash);
 	tryWithFile(commitFile, commitPath, ({ return NULL; }), ({ return NULL; }))
 	{
-		Commit *commit = malloc(sizeof(Commit));
+		char name[STR_MAX] = {0}, email[STR_MAX] = {0}, branch[STR_MAX] = {0};
+		char message[COMMIT_MSG_LEN_MAX] = {0};
+		Commit commit = {0, NULL, NULL, 0, NULL, NULL, {NULL, 0}, {NULL, 0}, 0, 0};
+		// Commit File Structure:
+		// Line 1 : "<username>:<email>:<time>:<branch>"
+		// Line 2 : "[perv]:<pervHash>" or  "[perv]:<pervHash>:[merged]:<mergedHash>"
+		// Line 3 : "[message]:[<message>]"
+		// Line 4 : "[<a>]:[<b>]"   // a : number of commit files , b : number of head files
+		// Line 5 -> 4+a : Commited files (same format with staging info)
+		// Line 5+a : \n
+		// Line 6+a -> 5+a+b : HEAD files (same format with staging info)
+		fscanf(commitFile, "%[^:]:%[^:]:%ld:%[^\n]\n", name, email, &(commit.time), branch);
+		if (!*name || !*email || !commit.time || !*branch)
+			throw(ERR_GENERAL);
+		fscanf(commitFile, "[perv]:%lx\n", &(commit.prev));
+		if (!commit.prev)
+			throw(ERR_GENERAL);
+		fscanf(commitFile, "[message]:[%[^]]]\n", message);
+		if (!*message)
+			throw(ERR_GENERAL);
+		fscanf(commitFile, "[%u]:[%u]\n", &(commit.commitedFiles.len), &(commit.headFiles.len));
+		if (!commit.commitedFiles.len || !commit.headFiles.len)
+			throw(ERR_GENERAL);
 
-		// fscanf("")
+		commit.commitedFiles.arr = malloc(sizeof(StagedFile) * commit.commitedFiles.len);
+		commit.headFiles.arr = malloc(sizeof(StagedFile) * commit.headFiles.len);
 
-		// 	return commit;
+		for (int i = 0; i < commit.commitedFiles.len; i++)
+		{
+			char filePath[PATH_MAX];
+			time_t timeM = 0;
+			uint perm = 0;
+			char hash[11];
+			fscanf(commitFile, "%[^:]:%ld:%u:%s\n", filePath, &timeM, &perm, hash);
+
+			StagedFile *sf = &(commit.commitedFiles.arr[i]);
+			sf->file.path = strDup(filePath);
+			strcpy(sf->hashStr, hash);
+			sf->file.dateModif = timeM;
+			sf->file.isDeleted = (strcmp("dddddddddd", hash) == 0);
+			sf->file.permission = perm;
+		}
+
+		for (int i = 0; i < commit.headFiles.len; i++)
+		{
+			char filePath[PATH_MAX];
+			time_t timeM = 0;
+			uint perm = 0;
+			char hash[11];
+			fscanf(commitFile, "\n%[^:]:%ld:%u:%s\n", filePath, &timeM, &perm, hash);
+
+			StagedFile *sf = &(commit.headFiles.arr[i]);
+			sf->file.path = strDup(filePath);
+			strcpy(sf->hashStr, hash);
+			sf->file.dateModif = timeM;
+			sf->file.isDeleted = (strcmp("dddddddddd", hash) == 0);
+			sf->file.permission = perm;
+		}
+		if (ferror(commitFile))
+			throw(ERR_FILE_ERROR);
+
+		dynamic_allocated_commit = malloc(sizeof(Commit));
+		*dynamic_allocated_commit = commit;
+	}
+	return dynamic_allocated_commit;
+}
+
+void freeCommitStruct(Commit *object)
+{
+	if (object)
+	{
+		if (object->branch)
+			free(object->branch);
+		if (object->username)
+			free(object->username);
+		if (object->useremail)
+			free(object->useremail);
+		if (object->message)
+			free(object->message);
+		if (object->headFiles.arr)
+			free(object->headFiles.arr);
+		if (object->commitedFiles.arr)
+			free(object->commitedFiles.arr);
+		free(object);
 	}
 }

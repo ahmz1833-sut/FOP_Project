@@ -6,7 +6,8 @@ int restoreStageingBackup()
 {
 	char tmp[PATH_MAX];
 	sprintf(tmp, "%s/." PROGRAM_NAME "/stage/old0", curRepository->absPath);
-	if (access(tmp, F_OK) == -1) return ERR_NOT_EXIST; // check if not exist
+	if (access(tmp, F_OK) == -1)
+		return ERR_NOT_EXIST; // check if not exist
 
 	FileEntry *buf = NULL;
 	strConcatStatic(tmp, curRepository->absPath, "/." PROGRAM_NAME "/stage");
@@ -16,19 +17,20 @@ int restoreStageingBackup()
 		if (!buf[i].isDir)
 			remove(buf[i].path);
 	freeFileEntry(buf, res);
-	
+
 	// remove the top stack
 	char stagePath[PATH_MAX];
 	strcpy(stagePath, tmp);
 	strcat(tmp, "/old0");
 	systemf("mv \"%s\"/* \"%s\" 2>/dev/null", tmp, stagePath); // move back all backed up files
-	systemf("rm -r \"%s\"", tmp); // remove backup folder
+	systemf("rm -r \"%s\"", tmp);							   // remove backup folder
 
 	for (int i = 1; i <= 9; i++)
 	{
 		sprintf(tmp, "%s/." PROGRAM_NAME "/stage/old%d", curRepository->absPath, i);
 		// check if not exist
-		if (access(tmp, F_OK) == -1) break;
+		if (access(tmp, F_OK) == -1)
+			break;
 
 		// move top
 		tmp[strlen(tmp) - 1] = '\0'; // truncate and remove number from end of filename
@@ -71,12 +73,11 @@ int backupStagingArea()
 	return error;
 }
 
-
 int popStage()
 {
 	char path[PATH_MAX];
 
-	if(curRepository->stagingArea.arr)
+	if (curRepository->stagingArea.arr)
 	{
 		free(curRepository->stagingArea.arr);
 		curRepository->stagingArea.arr = NULL;
@@ -110,4 +111,59 @@ int popStage()
 		}
 		rewind(infoFile);
 	}
+}
+
+int popHead()
+{
+	char path[PATH_MAX];
+	curRepository->deatachedHead = false;
+	curRepository->head.branch = "master";
+	curRepository->head.hash = 0xFFFFFF;
+	curRepository->head.headFiles.arr = NULL;
+	curRepository->head.headFiles.len = 0;
+
+	strConcatStatic(path, curRepository->absPath, "/.neogit/HEAD");
+	systemf("touch \"%s\"", path);
+
+	char HEAD_content[STR_LINE_MAX] = {0};
+	tryWithFile(HEADfile, path, ({ return ERR_FILE_ERROR; }), ({ return _ERR; }))
+		fgets(HEAD_content, STR_LINE_MAX, HEADfile);
+
+	Commit *head = NULL;
+	if (isMatch(HEAD_content, "branch/*"))
+	{
+		char branch[STR_LINE_MAX];
+		sscanf(HEAD_content, "branch/%s", branch);
+		curRepository->head.branch = strDup(branch);
+		curRepository->head.hash = getBranchHead(branch);
+		head = getCommit(curRepository->head.hash);
+	}
+	else if (isMatch(HEAD_content, "commit/*"))
+	{
+		curRepository->deatachedHead = true;
+		sscanf(HEAD_content, "commit/%lx", &curRepository->head.hash);
+		head = getCommit(curRepository->head.hash);
+		if (head)
+			curRepository->head.branch = head->branch;
+	}
+	else
+		systemf("echo branch/master>\"%s/.neogit/HEAD\"", curRepository->absPath);
+
+	if (head)
+	{
+		// obtain head files
+		curRepository->head.headFiles = head->headFiles;
+
+		if (head->username)
+			free(head->username);
+		if (head->useremail)
+			free(head->useremail);
+		if (head->message)
+			free(head->message);
+		if (head->commitedFiles.arr)
+			free(head->commitedFiles.arr);
+		// We don't free "branch" and "headFiles arr" (we need them)
+		free(head);
+	}
+	return ERR_NOERR;
 }

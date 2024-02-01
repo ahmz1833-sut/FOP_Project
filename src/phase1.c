@@ -153,16 +153,20 @@ int command_init(int argc, constString argv[], bool performActions)
         mkdir(strConcatStatic(neogitFolder, curWorkingDir, "/." PROGRAM_NAME), 0775);
         mkdir(strConcatStatic(tmpPath, neogitFolder, "/stage"), 0775);
         mkdir(strConcatStatic(tmpPath, neogitFolder, "/objects"), 0775);
+        mkdir(strConcatStatic(tmpPath, neogitFolder, "/commits"), 0775);
         mkdir(strConcatStatic(tmpPath, neogitFolder, "/stash"), 0775);
-        systemf("touch .neogit/config");
-        systemf("touch .neogit/tracked");
-        systemf("touch .neogit/HEAD");
-        systemf("touch .neogit/branches");
-        systemf("touch .neogit/tags");
+        systemf("touch ." PROGRAM_NAME "/config");
+        systemf("touch ." PROGRAM_NAME "/tracked");
+        systemf("touch ." PROGRAM_NAME "/HEAD");
+        systemf("touch ." PROGRAM_NAME "/branches");
+        systemf("touch ." PROGRAM_NAME "/tags");
 
-        // TODO: create branch master and checkout it;
-        printf(_CYAN "The branch " _BOLD "\'%s\'" _UNBOLD " created successfully!\n" _RST, "master");
-        printf(_CYAN "You are checked out the branch " _BOLD "\'%s\'" _UNBOLD " successfully!\n" _RST, "master");
+        int err = 0;
+        err |= obtainRepository(curWorkingDir);
+        constString a[] = {"", "master"};
+        err |= command_branch(2, a, true);
+        err |= command_checkout(2, a, true);
+        return err;
     }
     return ERR_NOERR;
 }
@@ -553,6 +557,7 @@ int command_commit(int argc, constString argv[], bool performActions)
         strValidate(message, argv[2], VALID_CHARS);
     }
 
+    // obtain shortcut message
     else if (checkArgument(1, "-s"))
     {
         char configKey[strlen(argv[2]) + 10];
@@ -574,33 +579,46 @@ int command_commit(int argc, constString argv[], bool performActions)
         }
     }
 
-    printf("%s\n", message);
-
     // Check the user.name and user.email
     String name = getConfig("user.name");
-    if(!name)
-    {
-        printError("Please submit your information and configs for NeoGIT!");
-        printError("You haven't been configured the UserName!");
-        printError("You can set it by Command: " _BOLD "\"neogit config [--global] user.name <yourname>\"" _RST);
-        return ERR_CONFIG_NOTFOUND;
-    }
     String email = getConfig("user.email");
-    if(!email)
+    if (!name || !email)
     {
-        printError("Please submit your information and configs for NeoGIT!");
-        printError("You haven't been configured your Email!");
-        printError("You can set it by Command: " _BOLD "\"neogit config [--global] user.email <youremail@example.com>\"" _RST);
+        printError("You haven't been configured the user information!");
+        printError("Please submit your information and configs for NeoGIT!\n");
+        printWarning("You must first set them by Command(s) below:");
+        if (!name)
+            printWarning(_BOLD "\"neogit config [--global] user.name <yourname>\"" _RST);
+        if (!email)
+            printWarning(_BOLD "\"neogit config [--global] user.email <youremail@example.com>\"" _RST);
         return ERR_CONFIG_NOTFOUND;
     }
-    
-    // message is persent !
+
+    if (curRepository->deatachedHead)
+    {
+        printWarning("Your HEAD is in DEATACHED MODE! You can not commit anything...");
+        return ERR_DEATACHED_HEAD;
+    }
+
+    if (curRepository->stagingArea.len == 0)
+    {
+        printWarning("No file staged! Nothing to commit ...");
+        return ERR_NOT_EXIST;
+    }
+
     // Perform the commit
+    Commit *res = createCommit(&curRepository->stagingArea, "stage", name, email, message);
+    if (res)
+    {
+        systemf("rm -r \"%s/.neogit/stage\"/*", curRepository->absPath); // remove staged files
 
-    // Chnage curRepository->head.headFiles
-    // 
-
-    // TODO
+        
+    }
+    else
+    {
+        printError("Error in perform commit!");
+        return ERR_UNKNOWN;
+    }
     return ERR_NOERR;
 }
 
@@ -690,25 +708,57 @@ int command_remove(int argc, constString argv[], bool performActions)
 int command_log(int argc, constString argv[], bool performActions)
 {
     // Check Syntax
-
     if (!performActions)
         return ERR_NOERR;
     if (!curRepository)
         return ERR_NOREPO;
-    
+
     return ERR_NOERR;
 }
 
 int command_branch(int argc, constString argv[], bool performActions)
 {
     // Check Syntax
-
     if (!performActions)
         return ERR_NOERR;
     if (!curRepository)
         return ERR_NOREPO;
 
-    return ERR_NOERR;
+    if (argc == 1) // list all branches
+    {
+        String branches[20];
+        uint64_t headHashes[20];
+        int count = listBranches(branches, headHashes);
+        for (int i = 0; i < count; i++)
+        {
+            if (headHashes[i] == curRepository->head.hash && strcmp(curRepository->head.branch, branches[i]) == 0)
+                printf(_GRNB "%s" _UNBOLD " (HEAD)\n" _RST, branches[i]);
+            else
+                printf("%s\n", branches[i]);
+        }
+        if (count < 1)
+            printError("No branch found! (An error occured!)");
+
+        return ERR_NOERR;
+    }
+    else if (argc == 2) // create branch
+    {
+        constString branch = argv[1];
+        if (getBranchHead(branch) != 0xFFFFFF) // branch exist
+        {
+            printWarning("The branch %s already exist!", branch);
+            return ERR_ALREADY_EXIST;
+        }
+
+        // create new branch
+        int res = setBranchHead(branch, curRepository->head.hash);
+        if (res == ERR_NOERR)
+            printf(_CYAN "The branch " _BOLD "\'%s\'" _UNBOLD " created successfully!\n" _RST, branch);
+        else
+            printError("An error occured when creating the branch " _BOLD "%s" _UNBOLD " .", branch);
+
+        return res;
+    }
 }
 
 int command_checkout(int argc, constString argv[], bool performActions)
@@ -719,6 +769,6 @@ int command_checkout(int argc, constString argv[], bool performActions)
         return ERR_NOERR;
     if (!curRepository)
         return ERR_NOREPO;
-
+    printf(_CYAN "You are checked out the branch " _BOLD "\'%s\'" _UNBOLD " successfully!\n" _RST, "master");
     return ERR_NOERR;
 }

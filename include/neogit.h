@@ -8,11 +8,11 @@
 #include "string_funcs.h"
 #include "file_system.h"
 #include "hash.h"
-#include "pushpop.h"
+
 
 #define PROGRAM_NAME "neogit"
 
-typedef struct
+typedef struct _command_t
 {
 	constString key;
 	uint minArgc;
@@ -21,26 +21,26 @@ typedef struct
 	constString usageHelp;
 } Command;
 
-typedef struct
+typedef struct _staged_file_t
 {
     FileEntry file;
     char hashStr[10]; // 10 digit hash
 } StagedFile;
 
-typedef struct
+typedef struct _staged_file_array_t
 {
     StagedFile *arr;
     uint len;
 } StagedFileArray;
 
-typedef struct
+typedef struct _head_t
 {
 	uint64_t hash;
 	String branch;
 	StagedFileArray headFiles;
 } HEAD;
 
-typedef struct
+typedef struct _commit_t
 {
 	uint64_t hash;
 	String username;
@@ -54,14 +54,14 @@ typedef struct
 	uint64_t mergedCommit;
 } Commit;
 
-typedef struct
+typedef struct _branch_array_t
 {
 	String* names;
 	uint64_t *headCommitHashs;
 	unsigned num;
 } BranchArray;
 
-typedef struct
+typedef struct _repository_t
 {
     String absPath;
     StagedFileArray stagingArea;
@@ -70,7 +70,7 @@ typedef struct
 	bool deatachedHead;
 } Repository;
 
-typedef enum
+typedef enum _change_status_t
 {
 	NOT_CHANGED = 0,
 	MODIFIED,
@@ -79,6 +79,7 @@ typedef enum
 	PERM_CHANGED
 } ChangeStatus;
 
+#include "pushpop.h"
 
 #define checkArgument(num, cmd) (argc >= (num) + 1 && isMatch(argv[num], cmd))
 #define checkArgumentPure(num, cmd) (argc == num + 1 && isMatch(argv[num], cmd))
@@ -124,7 +125,7 @@ int process_command(int argc, constString argv[], bool performActions);
  */
 
 
-Repository* obtainRepository(constString workDir);
+int obtainRepository(constString workDir);
 
 /**
  * @brief Set a configuration key-value pair in the specified configuration file.
@@ -195,6 +196,15 @@ int trackFile(constString filepath);
 
 FileEntry getRepoFileEntry(constString path);
 int lsCombo(FileEntry** buf, constString path);
+
+
+Commit *createCommit(StagedFileArray *filesToCommit, String fromWhere, String username, String email, String message);
+Commit *getCommit(uint64_t hash);
+void freeCommitStruct(Commit *object);
+
+uint64_t getBranchHead(constString branchName);
+int setBranchHead(constString branchName, uint64_t commitHash);
+int listBranches(String *namesDest, uint64_t *hashesDest);
 
 StagedFile *getStagedFile(constString path);
 bool isTrackedFile(constString path);

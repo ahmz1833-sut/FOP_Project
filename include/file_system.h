@@ -12,7 +12,7 @@
 #include "common.h"
 #include "string_funcs.h"
 
-typedef struct
+typedef struct _file_entry_t
 {
 	String path;
 	time_t dateModif;
@@ -21,7 +21,7 @@ typedef struct
 	unsigned isDeleted : 1;
 } FileEntry;
 
-typedef struct
+typedef struct _diff_t
 {
 	String *linesRemoved;
 	uint *lineNumberRemoved;

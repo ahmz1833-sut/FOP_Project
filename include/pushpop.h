@@ -6,5 +6,6 @@
 int backupStagingArea();
 int restoreStageingBackup();
 int popStage();
+int popHead();
 
 #endif

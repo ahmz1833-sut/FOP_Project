@@ -26,6 +26,7 @@ typedef char const *constString;
 #define ERR_MALLOC 7
 #define ERR_NOT_EXIST 8
 #define ERR_GENERAL 10
+#define ERR_DEATACHED_HEAD 11
 #define ERR_UNKNOWN 100
 
 #define STR_LINE_MAX 256

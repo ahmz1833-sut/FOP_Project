@@ -3,7 +3,7 @@
 #include "phase1.h"
 #include "phase2.h"
 
-// #define __DEBUG_MODE__ "neogit init"
+// #define __DEBUG_MODE__ "neogit checkout h"
 int _err = 0;
 
 const Command cmds[] = {
@@ -16,12 +16,11 @@ const Command cmds[] = {
     {"set", 6, 6, command_shortcutmsg, CMD_SHORTCUT_USAGE},
     {"replace", 6, 6, command_shortcutmsg, CMD_SHORTCUT_USAGE},
     {"remove", 4, 4, command_remove, CMD_SHORTCUT_USAGE},
-    {"log", 2, 5, command_log, CMD_LOG_USAGE},
+    {"log", 2, 15, command_log, CMD_LOG_USAGE},
     {"branch", 2, 3, command_branch, CMD_BRANCH_USAGE},
-    {"checkout", 3, 3, command_checkout, CMD_CHECKOUT_USAGE},
+    {"checkout", 3, 4/***3*/, command_checkout, CMD_CHECKOUT_USAGE},
     {"revert", 3, 7, command_revert, CMD_REVERT_USAGE},
     {"tag", 2, 9, command_tag, CMD_TAG_USAGE},
-    {"stash", 3, 5, command_stash, CMD_STASH_USAGE},
     {"grep", 6, 9, command_grep, CMD_GREP_USAGE},
     {"diff", 5, 9, command_diff, CMD_DIFF_USAGE},
     {"merge", 5, 6, command_merge, CMD_MERGE_USAGE},

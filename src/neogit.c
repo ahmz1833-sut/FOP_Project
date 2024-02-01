@@ -662,6 +662,12 @@ Commit *getCommit(uint64_t hash)
 		fscanf(commitFile, "[%u]:[%u]\n", &(commit.commitedFiles.len), &(commit.headFiles.len));
 		if (!commit.commitedFiles.len || !commit.headFiles.len)
 			throw(ERR_GENERAL);
+		
+		commit.hash = hash;
+		commit.username = strDup(name);
+		commit.useremail = strDup(email);
+		commit.branch = strDup(branch);
+		commit.message = strDup(message);
 
 		commit.commitedFiles.arr = malloc(sizeof(StagedFile) * commit.commitedFiles.len);
 		commit.headFiles.arr = malloc(sizeof(StagedFile) * commit.headFiles.len);

@@ -33,6 +33,9 @@ typedef char const *constString;
 #define STR_MAX 1000
 #define STR_CMD_MAX 10000
 #define COMMIT_MSG_LEN_MAX 72
+#define DATETIME_STR_MAX 50
+
+#define DEFAULT_DATETIME_FORMAT "%c %z"
 
 #define systemf(...) ({char _cmd[STR_CMD_MAX]; sprintf(_cmd, __VA_ARGS__); system(_cmd); })
 

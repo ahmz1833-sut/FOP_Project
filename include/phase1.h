@@ -3,6 +3,16 @@
 
 #include "neogit.h"
 
+typedef struct _log_options_t
+{
+	uint n;
+	constString branch;
+	constString author;
+	time_t since;
+	time_t before;
+	constString search;
+} LogOptions;
+
 int command_init(int argc, constString argv[], bool performActions);
 #define CMD_INIT_USAGE ""
 

@@ -4,85 +4,32 @@
 extern String curWorkingDir;	  // Declared in neogit.c
 extern Repository *curRepository; // Declared in neogit.c
 
-// root path must be absolute / list function must accept abs path and return abs path / relative path to repo passed to print function
-void __printTree(FileEntry *root, uint curDepth, int (*listFunction)(FileEntry **, constString), void (*printFunction)(FileEntry *))
-{
-	bool isLastBefore[16];
-	// Extract is last before (in tree prinitng) from bits  of flags
-	for (int i = 4; i < 20; i++)
-		isLastBefore[i - 4] = curDepth & (1 << i);
-
-	curDepth &= 0xF;   // Clear all but lower 4 bits (real curDepth)
-	if (curDepth == 0) // base of recursive
-		return;
-
-	static int maxDepth = 0;
-	if (maxDepth < curDepth) // First call
-	{
-		maxDepth = curDepth;
-		// calculate relative path
-		FileEntry fe = getFileEntry(root->path, curRepository->absPath);
-		printFunction(&fe);
-		freeFileEntry(&fe, 1);
-	}
-
-	FileEntry *array;
-	uint num = listFunction(&array, root->path);
-	if (!num)
-		return;
-
-	for (int i = 0; i < num; i++)
-	{
-		for (int j = 0; j <= (maxDepth - curDepth); j++)
-		{
-			if (j != maxDepth - curDepth) // Indentations
-				printf("%s   ", isLastBefore[j] ? " " : "│");
-			else if (isLastBefore[maxDepth - curDepth] = (i == num - 1)) // Last entry of current directory
-				printf("└── ");
-			else
-				printf("├── ");
-		}
-
-		FileEntry relativeToRepo = getFileEntry(array[i].path, curRepository->absPath);
-		printFunction(&relativeToRepo);
-		if (array[i].isDir && curDepth > 1 && !isMatch(relativeToRepo.path, ".neogit"))
-		{
-			uint passedInt = curDepth - 1;
-			for (int i = 4; i < 20; i++)
-				passedInt |= (isLastBefore[i - 4] ? (1 << i) : 0);
-			__printTree(&array[i], passedInt, listFunction, printFunction);
-		}
-		freeFileEntry(&relativeToRepo, 1);
-	}
-	freeFileEntry(array, num);
-	free(array);
-}
-
 void __stage_print_func(FileEntry *element)
 {
-	if (isMatch(element->path, ".neogit")) // .neogit Directory
-		printf(_MAGNTA _BOLD ".neogit" _UNBOLD " (NeoGIT Directory)\n" _RST);
+	if (isMatch(element->path, "." PROGRAM_NAME)) // .neogit Directory
+		printf(_MAGNTA _BOLD "." PROGRAM_NAME _UNBOLD " (NeoGIT Directory)\n" _RST);
 	else if (element->isDir) // Directory
 		printf(_BLU _BOLD "%s" _UNBOLD " (dir)\n" _RST, getFileName(element->path));
 	else if (!isTrackedFile(element->path)) // Untracked
 		printf(_GRN _BOLD "%s" _UNBOLD " → Untraked\n" _RST, getFileName(element->path));
 	else if (getChangesFromStaging(element->path)) // Unstaged (Modified)
 		printf(_YEL _BOLD "%s" _UNBOLD " → Modified\n" _RST, getFileName(element->path));
-	else // Staged
+	else if (getChangesFromHEAD(element->path)) // Staged
 		printf(_BOLD "%s" _UNBOLD " → Staged\n" _RST, getFileName(element->path));
+	else // not changed from head commit
+		printf(_BOLD _DIM "%s" _UNBOLD _DIM " → Commited\n" _RST, getFileName(element->path));
 }
 
 void __status_print_func(FileEntry *element)
 {
 	String name = getFileName(element->path);
 
-	if (isMatch(element->path, ".neogit")) // .neogit Directory
-		printf(_MAGNTA _BOLD ".neogit" _UNBOLD " (NeoGIT Directory)\n" _RST);
+	if (isMatch(element->path, "." PROGRAM_NAME)) // .neogit Directory
+		printf(_MAGNTA _BOLD "." PROGRAM_NAME _UNBOLD " (NeoGIT Directory)\n" _RST);
+	else if(isMatch(element->path, "."))
+		printf(_BLU "(Repository Root)\n" _RST);
 	else if (element->isDir) // Directory
-		printf(_BLU "%s"
-					" (dir)\n" _RST,
-			   name);
-
+		printf(_BLU "%s  (dir)\n" _RST, name);
 	else
 	{
 		ChangeStatus changes = getChangesFromStaging(element->path);
@@ -106,35 +53,6 @@ void __status_print_func(FileEntry *element)
 			break;
 		}
 	}
-}
-
-int __status_list_func(FileEntry **buf, constString dest)
-{
-	FileEntry *mybuf = NULL;
-	int count = lsCombo(&mybuf, dest);
-	if (count <= 0)
-		return count;
-
-	int newCount = 0;
-	for (int i = 0; i < count; i++)
-	{
-		String localPath = getFileEntry(mybuf[i].path, curRepository->absPath).path;
-		if (mybuf[i].isDir || getChangesFromHEAD(localPath) || getChangesFromStaging(localPath))
-		{
-			// add to buf
-			if (newCount == 0)
-				*buf = (FileEntry *)malloc((newCount = 1) * sizeof(FileEntry));
-			else
-				*buf = (FileEntry *)realloc(*buf, (++newCount) * sizeof(FileEntry));
-
-			(*buf)[newCount - 1] = mybuf[i];
-		}
-		else // don't  add to buf
-			free(mybuf[i].path);
-		free(localPath);
-	}
-	free(mybuf);
-	return newCount;
 }
 
 int __cmpCommitsByDateDescending(const void *a, const void *b)
@@ -195,7 +113,6 @@ int command_init(int argc, constString argv[], bool performActions)
 		mkdir(strConcatStatic(tmpPath, neogitFolder, "/stage"), 0775);
 		mkdir(strConcatStatic(tmpPath, neogitFolder, "/objects"), 0775);
 		mkdir(strConcatStatic(tmpPath, neogitFolder, "/commits"), 0775);
-		mkdir(strConcatStatic(tmpPath, neogitFolder, "/stash"), 0775);
 		systemf("touch ." PROGRAM_NAME "/config");
 		systemf("touch ." PROGRAM_NAME "/tracked");
 		systemf("touch ." PROGRAM_NAME "/HEAD");
@@ -232,7 +149,7 @@ int command_config(int argc, constString argv[], bool performActions)
 	if (performActions && !globalFlagIndex && !curRepository)
 		return ERR_NOREPO;
 
-	tryWithString(key, malloc(strlen(argv[keyArgIndex])), ({ return ERR_MALLOC; }), ({ return _ERR; }))
+	tryWithString(key, malloc(strlen(argv[keyArgIndex])), ({ return ERR_MALLOC; }), __retTry)
 	{
 		// Extract key and validate it
 		uint invalid = strValidate(key, argv[keyArgIndex], VALID_CHARS);
@@ -295,6 +212,7 @@ int command_config(int argc, constString argv[], bool performActions)
 			throw(errcode);
 		}
 	}
+	return ERR_NOERR;
 }
 
 int command_add(int argc, constString argv[], bool performActions)
@@ -311,7 +229,7 @@ int command_add(int argc, constString argv[], bool performActions)
 			return ERR_NOERR;
 
 		FileEntry root = getFileEntry(".", NULL);
-		__printTree(&root, atoi(argv[2]), ls, __stage_print_func);
+		processTree(&root, atoi(argv[2]), ls, true, __stage_print_func);
 		freeFileEntry(&root, 1);
 		return ERR_NOERR;
 	}
@@ -328,7 +246,7 @@ int command_add(int argc, constString argv[], bool performActions)
 		char tracklistFilePath[PATH_MAX];
 		strConcatStatic(tracklistFilePath, curRepository->absPath, "/." PROGRAM_NAME "/tracked");
 		systemf("touch \"%s\"", tracklistFilePath);
-		tryWithFile(manifestFile, tracklistFilePath, ({ return ERR_FILE_ERROR; }), ({ return _ERR; }))
+		tryWithFile(manifestFile, tracklistFilePath, ({ return ERR_FILE_ERROR; }), __retTry)
 		{
 			char buf[PATH_MAX];
 			while (fgets(buf, sizeof(buf), manifestFile) != NULL)
@@ -388,7 +306,7 @@ int command_add(int argc, constString argv[], bool performActions)
 
 		// entry paths will be absolute
 		FileEntry *entries = NULL;
-		int result = lsCombo(&entries, dest);
+		int result = lsWithHead(&entries, dest);
 		if (result == -1) // error
 			printError("Error! " _BOLD "\"%s\"" _UNBOLD " : No such file or directory!", argument);
 		else if (result == -2) // add file
@@ -509,7 +427,7 @@ int command_reset(int argc, constString argv[], bool performActions)
 
 		// entry paths will be absolute
 		FileEntry *entries = NULL;
-		int result = lsCombo(&entries, dest);
+		int result = lsWithHead(&entries, dest);
 		if (result == -1) // error
 			printError("Error! " _BOLD "\"%s\"" _UNBOLD " : No such file or directory!", argument);
 		else if (result == -2) // reset file
@@ -572,9 +490,21 @@ int command_status(int argc, constString argv[], bool performActions)
 	if (!curRepository)
 		return ERR_NOREPO;
 
-	FileEntry root = getFileEntry(".", NULL);
-	__printTree(&root, 15, __status_list_func, __status_print_func);
-	freeFileEntry(&root, 1);
+	if (!curRepository->deatachedHead)
+		printf("On branch " _YELB "'%s'\n\n" _RST, curRepository->head.branch);
+	else
+		printf(_YELB "YOU ARE IN DEATACHED HEAD MODE!! DONT CHANGE FILES!!!\n\n" _RST);
+
+	if (lsChangedFiles(NULL, curRepository->absPath))
+	{
+		FileEntry root = getFileEntry(curRepository->absPath, NULL);
+		processTree(&root, 15, lsChangedFiles, true, __status_print_func);
+		freeFileEntry(&root, 1);
+		printf("\n");
+	}
+	else
+		printf(_CYAN "Working tree is clean! No modifications.\n\n" _RST);
+
 	return ERR_NOERR;
 }
 
@@ -607,7 +537,7 @@ int command_commit(int argc, constString argv[], bool performActions)
 		if (!performActions)
 			return ERR_NOERR;
 		char configKey[strlen(argv[2]) + 10];
-		tryWithString(shortcutKey, malloc(sizeof(configKey)), ({ return ERR_MALLOC; }), ({ return _ERR; }))
+		tryWithString(shortcutKey, malloc(sizeof(configKey)), ({ return ERR_MALLOC; }), __retTry)
 		{
 			strValidate(shortcutKey, argv[2], VALID_CHARS);
 			if (isEmpty(shortcutKey))
@@ -639,9 +569,9 @@ int command_commit(int argc, constString argv[], bool performActions)
 		printError("Please submit your information and configs for NeoGIT!\n");
 		printWarning("You must first set them by Command(s) below:");
 		if (!name)
-			printWarning(_BOLD "\"neogit config [--global] user.name <yourname>\"" _RST);
+			printWarning(_BOLD "\"" PROGRAM_NAME " config [--global] user.name <yourname>\"" _RST);
 		if (!email)
-			printWarning(_BOLD "\"neogit config [--global] user.email <youremail@example.com>\"" _RST);
+			printWarning(_BOLD "\"" PROGRAM_NAME " config [--global] user.email <youremail@example.com>\"" _RST);
 		return ERR_CONFIG_NOTFOUND;
 	}
 
@@ -661,7 +591,7 @@ int command_commit(int argc, constString argv[], bool performActions)
 	Commit *res = createCommit(&curRepository->stagingArea, "stage", name, email, message);
 	if (res)
 	{
-		systemf("rm -r \"%s/.neogit/stage\"/*", curRepository->absPath); // remove staged files
+		systemf("rm -r \"%s/." PROGRAM_NAME "/stage\"/*", curRepository->absPath); // remove staged files
 
 		printf("Successfully performed the commit: " _CYANB "'%s'\n" _RST, message);
 		char datetime[DATETIME_STR_MAX];
@@ -687,7 +617,7 @@ int command_shortcutmsg(int argc, constString argv[], bool performActions)
 		return ERR_ARGS_MISSING;
 
 	char configKey[strlen(argv[shortcut]) + 10];
-	tryWithString(shortcutKey, malloc(sizeof(configKey)), ({ return ERR_MALLOC; }), ({ return _ERR; }))
+	tryWithString(shortcutKey, malloc(sizeof(configKey)), ({ return ERR_MALLOC; }), __retTry)
 	{
 		strValidate(shortcutKey, argv[shortcut], VALID_CHARS);
 		if (isEmpty(shortcutKey))
@@ -739,7 +669,7 @@ int command_remove(int argc, constString argv[], bool performActions)
 		return ERR_ARGS_MISSING;
 
 	char configKey[strlen(argv[2]) + 10];
-	tryWithString(shortcutKey, malloc(sizeof(configKey)), ({ return ERR_MALLOC; }), ({ return _ERR; }))
+	tryWithString(shortcutKey, malloc(sizeof(configKey)), ({ return ERR_MALLOC; }), __retTry)
 	{
 		strValidate(shortcutKey, argv[2], VALID_CHARS);
 		if (isEmpty(shortcutKey))
@@ -774,7 +704,7 @@ int command_log(int argc, constString argv[], bool performActions)
 
 	// obtain array of commits
 	char commitsPath[PATH_MAX];
-	strConcatStatic(commitsPath, curRepository->absPath, "/.neogit/commits");
+	strConcatStatic(commitsPath, curRepository->absPath, "/." PROGRAM_NAME "/commits");
 	FileEntry *buf = NULL;
 	int entryCount = ls(&buf, commitsPath); // list all entries in .neogit/commits/
 	Commit **commits = (Commit **)malloc(sizeof(Commit *) * entryCount);
@@ -802,11 +732,11 @@ int command_log(int argc, constString argv[], bool performActions)
 		else if (!strReplace(NULL, commits[i]->message, options.search, NULL)) // word pattern not found
 			continue;
 
-		printf("Commit : hash " _YELB "'%06lx'" _RST " on branch " _YELB "'%s'" _RST, commits[i]->hash, commits[i]->branch);
-		if (commits[i]->hash == getBranchHead(commits[i]->branch))
+		printf("\nCommit : hash " _YELB "'%06lx'" _RST " on branch " _YELB "'%s'" _RST, commits[i]->hash, commits[i]->branch);
+		if (commits[i]->hash == getBranchHead(commits[i]->branch) & 0xFFFFFF)
 			printf(_GRN " (%s HEAD)" _RST, commits[i]->branch);
 		if (commits[i]->hash == curRepository->head.hash)
-			printf(" " _CYAN_BKG _BOLD "(current HEAD)" _RST);
+			printf(" " _REDB "-> HEAD" _RST);
 		printf("\n");
 
 		char datetime[DATETIME_STR_MAX];
@@ -819,7 +749,7 @@ int command_log(int argc, constString argv[], bool performActions)
 		printf("Commit Message: " _CYAN "'%s'\n" _RST, boldedMsg);
 		printf(_DIM "[" _BOLD "%u" _UNBOLD _DIM " file(s) commited]\n" _RST, commits[i]->commitedFiles.len);
 
-		printf("\n\n");
+		printf("\n");
 		printedLogCount++;
 		freeCommitStruct(commits[i]);
 	}
@@ -878,7 +808,7 @@ int command_branch(int argc, constString argv[], bool performActions)
 		if (!curRepository)
 			return ERR_NOREPO;
 
-		if (getBranchHead(branch) != 0xFFFFFF) // branch exist
+		if (getBranchHead(branch) >> 24 == 0) // branch exist
 		{
 			printWarning("The branch %s already exist!", branch);
 			return ERR_ALREADY_EXIST;
@@ -898,11 +828,95 @@ int command_branch(int argc, constString argv[], bool performActions)
 int command_checkout(int argc, constString argv[], bool performActions)
 {
 	// Check Syntax
-
 	if (!performActions)
 		return ERR_NOERR;
 	if (!curRepository)
 		return ERR_NOREPO;
-	// printf(_CYAN "You are checked out the branch " _BOLD "\'%s\'" _UNBOLD " successfully!\n" _RST, "master");
+
+	constString targetStr = "HEAD";
+	char branch[STR_LINE_MAX];
+	uint64_t hash = 0;
+	bool deatched = false;
+
+	if (isMatch(argv[1], "HEAD"))
+		strcpy(branch, curRepository->head.branch);
+	else if (isMatch(argv[1], "HEAD-*"))
+	{
+		uint order = 0;
+		if ((sscanf(argv[1], "HEAD-%u", &order) != 1) || !order)
+			return ERR_ARGS_MISSING;
+		hash = getBrachHeadPrev(curRepository->head.branch, order) & 0xFFFFFF;
+		if (hash == 0xFFFFFF)
+		{
+			printError("Unable to checkout HEAD-%u : Parent does not exist!", order);
+			return ERR_NOT_EXIST;
+		}
+		targetStr = argv[1];
+		deatched = true;
+	}
+	else if ((getBranchHead(argv[1]) >> 24) == 0) // branch exist
+		strcpy(branch, targetStr = argv[1]);
+	else if ((sscanf(targetStr = argv[1], "%lx", &hash) == 1) && hash) // try to scan commit hash
+	{
+		Commit *c = getCommit(hash);
+		if (c != NULL) // commit hash found!
+		{
+			hash = c->hash;
+			deatched = true;
+			freeCommitStruct(c);
+		}
+		else
+		{
+			printError("The entered branch / commit hash not found!");
+			return ERR_NOT_EXIST;
+		}
+	}
+	else
+	{
+		printError("The entered branch / commit hash not found!");
+		return ERR_NOT_EXIST;
+	}
+
+	// Check if we have any change in working tree , forbid checkout!
+	if (isWorkingTreeModified())
+	{
+		printWarning("You have some uncommitted changes in your working tree!");
+		if (curRepository->deatachedHead)
+		{
+			printWarning(_BOLD "YOU HAVE MADE CHANGES IN WORKING TREE WHILE YOUR HEAD IS DEATACHED!!"_UNBOLD);
+			if (hash == curRepository->head.hash)
+			{
+				printWarning(_BOLD "REVERTING CHANGES ...\n" _UNBOLD);
+				goto apply; // revert current commit
+			}
+			else
+				printWarning(_BOLD "YOU CAN ONLY CHECKOUT TO CURRENT COMMIT (TO RESET CHANGES)!" _UNBOLD);
+		}
+		printError("Conflict Error!");
+		return ERR_NOT_COMMITED_CHANGE_FOUND;
+	}
+
+	// change head
+	if (!deatched) // (checkout branch)
+		systemf("echo branch/%s>\"%s/." PROGRAM_NAME "/HEAD\"", branch, curRepository->absPath);
+	else // checkout commit id
+		systemf("echo commit/%06lx>\"%s/." PROGRAM_NAME "/HEAD\"", hash, curRepository->absPath);
+	fetchHEAD(); // fetch the head to initialize the curRepository->head
+
+apply:
+	// We must check all the tracked files
+	// And get changeHead , then  compare it with head
+	// if we saw a difference, change the file in working tree into its head state
+	int res = applyToWorkingDir(curRepository->head.headFiles);
+
+	if (res == ERR_NOERR)
+	{
+		printf("You are checked out to " _CYANB "'%s'" _RST " successfully!\n", targetStr);
+		if (curRepository->deatachedHead)
+			printWarning("You're in DEATACHED HEAD mode!! Don't Chnage working tree files!\nElse, You're responsible for any problem in your repository!!");
+	}
+	else
+		printError("Error in checking out to " _BOLD "'%s'" _UNBOLD " !", targetStr);
+
 	return ERR_NOERR;
 }

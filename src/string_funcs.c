@@ -257,7 +257,7 @@ bool isMatch(constString _text, constString _pattern)
 
 time_t parseDateTimeAuto(constString dateTimeStr)
 {
-	Time tm = {0};
+	struct tm tm = {0};
 	// Try parsing in format "YYYY-MM-DD HH:MM:SS"
 	if (strptime(dateTimeStr, "%Y-%m-%d %H:%M:%S", &tm) != NULL)
 		return mktime(&tm);
@@ -274,7 +274,7 @@ time_t parseDateTimeAuto(constString dateTimeStr)
 	return ERR_ARGS_MISSING;
 }
 
-String strptime(constString restrict s, constString restrict f, Time *restrict tm)
+String strptime(constString restrict s, constString restrict f, struct tm *restrict tm)
 {
 	int i, w, neg, adj, min, range, *dest, dummy;
 	const char *ex;

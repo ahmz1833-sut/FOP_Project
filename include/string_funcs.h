@@ -1,16 +1,11 @@
 #ifndef __STR_PROC_H__
 #define __STR_PROC_H__
 
-#include <string.h>
-#include <stdlib.h>
-#include <ctype.h>
-#include <stdarg.h>
-#include <langinfo.h>
-#include <time.h>
-#include <stddef.h>
-#include <strings.h>
 #include "common.h"
-#include "ansi_color.h"
+#include <string.h>
+#include <ctype.h>
+#include <langinfo.h> // used in strptime implementation
+#include <stddef.h> // used in strptime implementation
 
 /*!
  * @brief Make a string bold. (string_funcs.h)
@@ -275,6 +270,6 @@ time_t parseDateTimeAuto(constString dateTimeStr);
  * @note The function supports a subset of the format specifiers used in the standard C library's strptime function.
  * @note The caller is responsible for allocating the Time structure (tm).
  */
-String strptime(constString buf, constString fmt, Time *tm);
+String strptime(constString buf, constString fmt, struct tm *tm);
 
 #endif

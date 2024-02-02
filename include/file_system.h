@@ -1,15 +1,10 @@
 #ifndef __FILE_SYSTEM_H__
 #define __FILE_SYSTEM_H__
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdarg.h>
+#include "common.h"
 #include <unistd.h>
 #include <dirent.h>
-#include <fcntl.h>
 #include <sys/stat.h>
-#include <linux/limits.h>
-#include "common.h"
 #include "string_funcs.h"
 
 typedef struct _file_entry_t
@@ -86,6 +81,8 @@ typedef struct _diff_t
 		fseek(f, _push, SEEK_SET); \
 		_size;                     \
 	})
+
+bool isSameFiles(constString path1, constString path2);
 
 /**
  * @brief Move data within a file's memory
@@ -176,6 +173,9 @@ int insertLine(FILE *file, int lineNumber, constString newContent);
 String normalizePath(constString _path, constString _repoPath);
 
 FileEntry getFileEntry(constString _path, constString _repopath);
+
+int __file_entry_sort_comparator(const void *a, const void *b);
+
 
 /**
  * @brief List entries in a directory and retrieve information about them

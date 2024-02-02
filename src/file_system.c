@@ -11,6 +11,7 @@ String normalizePath(constString _path, constString _repoPath)
 		else
 		{
 			getcwd(buf, PATH_MAX);
+			strcat(buf, "/");
 			strcat(buf, _path);
 		}
 	}
@@ -64,11 +65,21 @@ FileEntry getFileEntry(constString _path, constString _repopath)
 	return entry;
 }
 
+int __file_entry_sort_comparator(const void *a, const void *b)
+{
+	if (((FileEntry *)a)->isDir && !((FileEntry *)b)->isDir)
+		return -1000;
+	if (!((FileEntry *)a)->isDir && ((FileEntry *)b)->isDir)
+		return +1000;
+	else
+		return strcasecmp(getFileName(((FileEntry *)a)->path), getFileName(((FileEntry *)b)->path));
+}
+
 // input path must be absolute or relative to cwd
 // list the childs into a dir, put into buf. (buf paths are absolute)
 int ls(FileEntry **buf, constString _path)
 {
-	tryWithString(path, normalizePath(_path, ""), ({ return -1; }), ({ return _ERR; }))
+	tryWithString(path, normalizePath(_path, ""), ({ return -1; }), __retTry)
 	{
 		// if Path not exist
 		if (access(path, F_OK) != 0)
@@ -99,6 +110,7 @@ int ls(FileEntry **buf, constString _path)
 					withString(entryPath, strConcat(path, "/", entry->d_name))
 						childs[countOfChilds - 1] = getFileEntry(entryPath, NULL);
 				}
+				qsort(childs, countOfChilds, sizeof(FileEntry), __file_entry_sort_comparator);
 				if (buf)
 					*buf = childs;
 				throw(countOfChilds);
@@ -109,6 +121,7 @@ int ls(FileEntry **buf, constString _path)
 		else
 			throw(-2);
 	}
+	return 0;
 }
 
 void freeFileEntry(FileEntry *array, uint len)
@@ -244,9 +257,9 @@ int copyFile(constString _src, constString _dest, constString repo)
 
 	char dir[PATH_MAX];
 	systemf("mkdir -p \"%s\"", getParentName(dir, dest));
+	systemf("rm \"%s\" >/dev/null 2>/dev/null", dest);
 	systemf("touch \"%s\"", dest);
-
-	tryWithFile(srcFile, src, ({ return ERR_FILE_ERROR; }), ({ return _ERR; }))
+	tryWithFile(srcFile, src, ({ return ERR_FILE_ERROR; }), __retTry)
 	{
 		tryWithFile(destFile, dest, throw(ERR_FILE_ERROR), throw(_ERR))
 		{
@@ -266,6 +279,7 @@ int copyFile(constString _src, constString _dest, constString repo)
 			throw(ferror(srcFile) || ferror(destFile));
 		}
 	}
+	return ERR_NOERR;
 }
 
 Diff getDiff(constString baseFilePath, constString changedFilePath, int f1begin, int f1end, int f2begin, int f2end)
@@ -280,7 +294,7 @@ Diff getDiff(constString baseFilePath, constString changedFilePath, int f1begin,
 			uint line1_cnt = f1begin - 1, line2_cnt = f2begin - 1;
 			SEEK_TO_LINE(baseFile, f1begin);
 			SEEK_TO_LINE(changedFile, f2begin);
-			char* file1ReadResult = NULL;
+			char *file1ReadResult = NULL;
 			while ((file1ReadResult = SCAN_LINE_BOUNDED(baseFile, line1, line1_cnt, f1end)) && SCAN_LINE_BOUNDED(changedFile, line2, line2_cnt, f2end))
 			{
 				if (strcmp(line1, line2) == 0) // if same, continue
@@ -355,6 +369,24 @@ Diff getDiff(constString baseFilePath, constString changedFilePath, int f1begin,
 	}
 
 	return diff;
+}
+
+// abs path, or relative to cwd
+bool isSameFiles(constString path1, constString path2)
+{
+	tryWithFile(f1, path1, ({ return false; }), __retTry)
+		tryWithFile(f2, path2, throw(false), throw(_ERR))
+	{
+		size_t size;
+		if((size = GET_FILE_SIZE(f1)) != GET_FILE_SIZE(f2)) 
+			throw(false); // different file sizes
+		
+		for(size_t i = 0; i < size; i++)
+			if(fgetc(f1) != fgetc(f2)) throw(false); // found difference
+		
+		throw(true);
+	}
+	return false;
 }
 
 void freeDiffStruct(Diff *diff)

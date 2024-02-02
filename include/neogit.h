@@ -1,14 +1,10 @@
 #ifndef __NEOGIT_H__
 #define __NEOGIT_H__
 
-#include <stdio.h>
-#include <stdlib.h>
 #include "common.h"
-#include "ansi_color.h"
 #include "string_funcs.h"
 #include "file_system.h"
 #include "hash.h"
-
 
 #define PROGRAM_NAME "neogit"
 
@@ -23,14 +19,14 @@ typedef struct _command_t
 
 typedef struct _staged_file_t
 {
-    FileEntry file;
-    char hashStr[10]; // 10 digit hash
+	FileEntry file;
+	char hashStr[10]; // 10 digit hash
 } StagedFile;
 
 typedef struct _staged_file_array_t
 {
-    StagedFile *arr;
-    uint len;
+	StagedFile *arr;
+	uint len;
 } StagedFileArray;
 
 typedef struct _head_t
@@ -54,18 +50,10 @@ typedef struct _commit_t
 	uint64_t mergedCommit;
 } Commit;
 
-typedef struct _branch_array_t
-{
-	String* names;
-	uint64_t *headCommitHashs;
-	unsigned num;
-} BranchArray;
-
 typedef struct _repository_t
 {
-    String absPath;
-    StagedFileArray stagingArea;
-    BranchArray branches;
+	String absPath;
+	StagedFileArray stagingArea;
 	HEAD head;
 	bool deatachedHead;
 } Repository;
@@ -79,18 +67,7 @@ typedef enum _change_status_t
 	PERM_CHANGED
 } ChangeStatus;
 
-#include "pushpop.h"
-
-#define checkArgument(num, cmd) (argc >= (num) + 1 && isMatch(argv[num], cmd))
-#define checkArgumentPure(num, cmd) (argc == num + 1 && isMatch(argv[num], cmd))
-#define checkAnyArgument(cmd)                \
-	({                                       \
-		int __i;                             \
-		for (__i = argc; __i > 0; __i--)     \
-			if (isMatch(argv[__i - 1], cmd)) \
-				break;                       \
-		__i ? __i - 1 : 0;                   \
-	})
+int processTree(FileEntry *root, uint curDepth, int (*listFunction)(FileEntry **, constString), bool print_tree, void (*callbackFunction)(FileEntry *));
 
 /**
  * @brief Process and execute a command or check the command syntax.
@@ -109,6 +86,11 @@ typedef enum _change_status_t
  */
 int process_command(int argc, constString argv[], bool performActions);
 
+int backupStagingArea();
+int restoreStageingBackup();
+int fetchStagingArea();
+int fetchHEAD();
+
 /**
  * @brief Obtain the path of the repository containing a given working directory.
  *
@@ -123,8 +105,6 @@ int process_command(int argc, constString argv[], bool performActions);
  * repository is not found, or if memory allocation fails, NULL is returned. The caller
  * is responsible for freeing the memory allocated for the result.
  */
-
-
 int obtainRepository(constString workDir);
 
 /**
@@ -195,19 +175,22 @@ int addToStage(constString filePath);
 int trackFile(constString filepath);
 
 FileEntry getRepoFileEntry(constString path);
-int lsCombo(FileEntry** buf, constString path);
-
+int lsWithHead(FileEntry **buf, constString path);
+int lsChangedFiles(FileEntry **buf, constString dest);
 
 Commit *createCommit(StagedFileArray *filesToCommit, String fromWhere, String username, String email, String message);
 Commit *getCommit(uint64_t hash);
 void freeCommitStruct(Commit *object);
-
+uint64_t getBrachHeadPrev(constString branchName, uint order);
 uint64_t getBranchHead(constString branchName);
 int setBranchHead(constString branchName, uint64_t commitHash);
 int listBranches(String *namesDest, uint64_t *hashesDest);
 
 StagedFile *getStagedFile(constString path);
 bool isTrackedFile(constString path);
+int applyToWorkingDir(StagedFileArray head);
+bool isWorkingTreeModified();
+
 ChangeStatus getChangesFromHEAD(constString path);
 ChangeStatus getChangesFromStaging(constString path);
 

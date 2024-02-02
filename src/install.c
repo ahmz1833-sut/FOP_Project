@@ -1,3 +1,10 @@
+/*******************************
+ *         install.c           *
+ *    Copyright 2024 AHMZ      *
+ *  AmirHossein MohammadZadeh  *
+ *         402106434           *
+ *     FOP Project NeoGIT      *
+********************************/
 #include "install.h"
 
 int promptInstallation(constString srcAddress)
@@ -58,20 +65,8 @@ int __install_neogit_linux(constString source)
     // Upgrade
     if(IS_INSTALLED()) REMOVE_NEOGIT();
 
-    char __directoryPath[200];
-    char* ptr = strrchr(source, '/');
-    if (ptr != NULL)
-    {
-        uint len = (ptr - source);
-        sprintf(__directoryPath, "%s", source);
-        __directoryPath[len] = '/';
-        __directoryPath[len + 1] = '\0';
-    }
-    else strcpy(__directoryPath, "./");
-    
-    char _prompt[300];
-    sprintf(_prompt, "sudo ln -s \"$(pwd)/%s/" PROGRAM_NAME "\" " PROGRAM_PATH, __directoryPath);
-    if(system(_prompt)) return -1;
+    withString(absPath, normalizePath(source, NULL))
+        if(systemf("sudo ln -s \"%s\" " PROGRAM_PATH, absPath)) return -1;
 
     return IS_INSTALLED() ? 0 : -1;
 }

@@ -1,5 +1,12 @@
-#ifndef __STR_PROC_H__
-#define __STR_PROC_H__
+/*******************************
+ *      string_funcs.h         *
+ *    Copyright 2024 AHMZ      *
+ *  AmirHossein MohammadZadeh  *
+ *         402106434           *
+ *     FOP Project NeoGIT      *
+********************************/
+#ifndef __STR_FUNCS_H__
+#define __STR_FUNCS_H__
 
 #include "common.h"
 #include <string.h>
@@ -8,6 +15,45 @@
 #include <stddef.h> // used in strptime implementation
 
 /*!
+ * @brief Concatenate constant strings using a macro and return a newly allocated string (string_funcs.h)
+ *
+ * The strcat_d macro uses the _dynamic_strcat_impl function to concatenate constant strings
+ * and returns a newly allocated string. It accepts a variable number of arguments.
+ *
+ * Example:
+ * - Input: strcat_d("Hello, ", "World", "!")
+ *   Output: "Hello, World!"
+ *
+ * @param ... Constant strings to be concatenated
+ *
+ * @return A newly allocated string containing the concatenated result. The caller is
+ *         responsible for freeing the allocated memory.
+ */
+#define strcat_d(...) _dynamic_strcat_impl(__VA_ARGS__, (String)NULL)
+
+/*!
+ * @brief Concatenate multiple strings into a destination string (static version). (string_funcs.h)
+ *
+ * The strcat_s macro calls the _static_strcat_impl function to concatenate multiple strings
+ * into the destination string in a static manner.
+ *
+ * Usage:
+ * @code{.c}
+ * char result[256]; // Ensure enough space for the concatenated content
+ * strcat_s(result, "Hello", " ", "world");
+ * @endcode
+ *
+ * @param dest The destination string to store the result.
+ * @param ... Strings to concatenate.
+ * @return The destination string with concatenated content.
+ *
+ * @note The destination string must have enough space to accommodate the concatenated content.
+ * @note The macro provides a convenient way to concatenate strings in a static manner.
+ */
+#define strcat_s(dest, ...) _static_strcat_impl(dest, __VA_ARGS__, (String)NULL)
+
+
+/**
  * @brief Make a string bold. (string_funcs.h)
  *
  * The boldText function adds bold formatting to the provided string.
@@ -19,7 +65,54 @@
  */
 String boldText(constString s);
 
-/*!
+
+/**
+ * @brief Trim leading and trailing whitespaces in a string  (string_funcs.h)
+ *
+ * The strtrim function removes leading and trailing whitespaces, including
+ * newline, carriage return, tab, form feed, and space characters, from the given string.
+ *
+ * @param s The input string to be trimmed
+ *
+ * Example:
+ * - Input: "   Hello, World!   "
+ *   Output: "Hello, World!"
+ *
+ * @return The trimmed string. The original string is modified in-place.
+ */
+String strtrim(String s);
+
+
+/**
+ * @brief Check if a string is empty after removing leading and trailing whitespaces (string_funcs.h)
+ *
+ * The isEmpty function takes a string as input, trims leading and trailing whitespaces,
+ * and then checks if the resulting string is empty. The function returns true if the string
+ * is empty, and false otherwise.
+ *
+ * @param s The input string to check for emptiness
+ *
+ * @return true if the trimmed string is empty or the string is NULL, false otherwise.
+ */
+bool isEmpty(constString s);
+
+
+/**
+ * @brief Duplicate a string in memory (string_funcs.h)
+ *
+ * The strDup function takes a constant string as input, allocates memory for a duplicate,
+ * copies the content of the input string into the newly allocated memory, and returns the
+ * pointer to the duplicated string.
+ *
+ * @param src The constant string to be duplicated
+ *
+ * @return The pointer to the duplicated string. The caller is responsible for freeing
+ *         the allocated memory.
+ */
+String strDup(constString src);
+
+
+/**
  * @brief Replace exact words in a text based on a word pattern and apply a replacement function if provided.
  * (string_funcs.h)
  *
@@ -48,59 +141,6 @@ String boldText(constString s);
  */
 int strReplace(String dest, constString text, constString wordPattern, String (*replaceFunction)(constString));
 
-/**
- * @brief Check if a string contains '*' or '?' (string_funcs.h)
- *
- * The hasWildcard macro checks if a given string contains the wildcard characters '*'
- * or '?'. It returns true if either character is found, otherwise false.
- *
- * @param str The input string to check for wildcards
- *
- * Example:
- * - Input: hasWildcard("file*.txt")
- *   Output: true
- *
- * @return true if the string contains '*' or '?', false otherwise.
- */
-#define hasWildcard(str) (strchr(str, '*') || strchr(str, '?'))
-
-/**
- * @brief Concatenate constant strings using a macro and return a newly allocated string (string_funcs.h)
- *
- * The strConcat macro uses the better_strcat_impl function to concatenate constant strings
- * and returns a newly allocated string. It accepts a variable number of arguments.
- *
- * Example:
- * - Input: strConcat("Hello, ", "World", "!")
- *   Output: "Hello, World!"
- *
- * @param ... Constant strings to be concatenated
- *
- * @return A newly allocated string containing the concatenated result. The caller is
- *         responsible for freeing the allocated memory.
- */
-#define strConcat(...) better_strcat_impl(__VA_ARGS__, (String)NULL)
-
-/*!
- * @brief Concatenate multiple strings into a destination string (static version). (string_funcs.h)
- *
- * The strConcatStatic macro calls the _static_strcat_impl function to concatenate multiple strings
- * into the destination string in a static manner.
- *
- * Usage:
- * @code{.c}
- * char result[256]; // Ensure enough space for the concatenated content
- * strConcatStatic(result, "Hello", " ", "world");
- * @endcode
- *
- * @param dest The destination string to store the result.
- * @param ... Strings to concatenate.
- * @return The destination string with concatenated content.
- *
- * @note The destination string must have enough space to accommodate the concatenated content.
- * @note The macro provides a convenient way to concatenate strings in a static manner.
- */
-#define strConcatStatic(dest, first, ...) _static_strcat_impl(dest, first, __VA_ARGS__, (String)NULL)
 
 /**
  * @brief Validate a string based on allowed characters  (string_funcs.h)
@@ -124,34 +164,26 @@ int strReplace(String dest, constString text, constString wordPattern, String (*
  */
 uint strValidate(String dest, constString str, constString allowedChars);
 
-/**
- * @brief Check if a string is empty after removing leading and trailing whitespaces (string_funcs.h)
- *
- * The isEmpty function takes a string as input, trims leading and trailing whitespaces,
- * and then checks if the resulting string is empty. The function returns true if the string
- * is empty, and false otherwise.
- *
- * @param s The input string to check for emptiness
- *
- * @return true if the trimmed string is empty or the string is NULL, false otherwise.
- */
-bool isEmpty(constString s);
 
 /**
- * @brief Trim leading and trailing whitespaces in a string  (string_funcs.h)
+ * @brief Convert an unsigned long long (ullong) number to a hexadecimal string. (string_funcs.h)
  *
- * The strtrim function removes leading and trailing whitespaces, including
- * newline, carriage return, tab, form feed, and space characters, from the given string.
+ * The toHexString function converts an unsigned long long (ullong) number to a hexadecimal string.
+ * The resulting string is left-padded with zeros to achieve the specified number of digits.
+  * Example:
+ * - Input: toHexString(255, 4)
+ *   Output: "00FF"
  *
- * @param s The input string to be trimmed
+ * @param number The unsigned long long number to convert.
+ * @param digits The desired number of digits in the hexadecimal string.
  *
- * Example:
- * - Input: "   Hello, World!   "
- *   Output: "Hello, World!"
  *
- * @return The trimmed string. The original string is modified in-place.
+ * @return The hexadecimal string representation of the number.
+ *
+ * @note The caller is responsible for freeing the allocated memory of the returned string.
  */
-String strtrim(String s);
+String toHexString(ullong number, int digits);
+
 
 /**
  * @brief Tokenize a string using a delimiter and store the tokens in an array (string_funcs.h)
@@ -172,55 +204,6 @@ String strtrim(String s);
  */
 uint tokenizeString(String str, constString delim, String *destArray);
 
-/**
- * @brief Duplicate a string in memory (string_funcs.h)
- *
- * The strDup function takes a constant string as input, allocates memory for a duplicate,
- * copies the content of the input string into the newly allocated memory, and returns the
- * pointer to the duplicated string.
- *
- * @param src The constant string to be duplicated
- *
- * @return The pointer to the duplicated string. The caller is responsible for freeing
- *         the allocated memory.
- */
-String strDup(constString src);
-
-/**
- * @brief Concatenate constant strings and return a newly allocated string  (string_funcs.h)
- *
- * The better_strcat_impl function concatenates constant strings and returns a newly
- * allocated string. The function accepts a variable number of arguments, where the last
- * argument must be NULL, indicating the end of the string list.
- *
- * @param first The first constant string to be concatenated
- * @param ... Additional constant strings, terminated with NULL
- *
- * Example:
- * - Input: better_strcat_impl("Hello, ", "World", "!", NULL)
- *   Output: "Hello, World!"
- *
- * @return A newly allocated string containing the concatenated result. The caller is
- *         responsible for freeing the allocated memory.
- */
-String better_strcat_impl(constString first, ...);
-
-
-/*!
- * @brief Concatenate multiple strings into a destination string. (string_funcs.h)
- *
- * The _static_strcat_impl function concatenates multiple strings into the destination string.
- *
- * @param dest The destination string to store the result.
- * @param first The first string to concatenate.
- * @param ... Additional strings to concatenate. The last argument must be NULL.
- * @return The destination string with concatenated content.
- *
- * @note The destination string must have enough space to accommodate the concatenated content.
- * @note The function expects a NULL pointer as the last argument to signal the end of input strings.
- */
-String _static_strcat_impl(String dest, constString first, ...);
-
 
 /**
  * @brief Check if a given text matches a (probably) wildcard-included pattern (string_funcs.h)
@@ -240,7 +223,25 @@ String _static_strcat_impl(String dest, constString first, ...);
  */
 bool isMatch(constString _text, constString _pattern);
 
-/*!
+
+/**
+ * @brief Parse a string representation of time according to a format string. (implementation opaque)
+ *
+ * The strptime function parses a string (s) representing time according to the format string (f)
+ * and fills the Time structure (tm) with the extracted information.
+ *
+ * @param s The input string to be parsed.
+ * @param f The format string specifying the expected format of the input string.
+ * @param tm The Time structure to store the parsed time information.
+ * @return A pointer to the first character not processed in the input string, or NULL if an error occurs.
+ *
+ * @note The function supports a subset of the format specifiers used in the standard C library's strptime function.
+ * @note The caller is responsible for allocating the Time structure (tm).
+ */
+String strptime(constString s, constString f, struct tm *tm);
+
+
+/**
  * @brief Parse a date and time string in various formats and return the corresponding time_t value. (string_funcs.h)
  *
  * The parseDateTimeAuto function attempts to parse the input date and time string (dateTimeStr) in multiple formats,
@@ -256,20 +257,38 @@ bool isMatch(constString _text, constString _pattern);
  */
 time_t parseDateTimeAuto(constString dateTimeStr);
 
+
 /**
- * @brief Parse a string representation of time according to a format string. (string_funcs.h)
+ * @brief Concatenate constant strings and return a newly allocated string  (string_funcs.h)
  *
- * The strptime function parses a string (s) representing time according to the format string (f)
- * and fills the Time structure (tm) with the extracted information.
+ * The _dynamic_strcat_impl function concatenates constant strings and returns a newly
+ * allocated string. The function accepts a variable number of arguments, where the last
+ * argument must be NULL, indicating the end of the string list.
  *
- * @param s The input string to be parsed.
- * @param f The format string specifying the expected format of the input string.
- * @param tm The Time structure to store the parsed time information.
- * @return A pointer to the first character not processed in the input string, or NULL if an error occurs.
+ * @param first The first constant string to be concatenated
+ * @param ... Additional constant strings, terminated with NULL
  *
- * @note The function supports a subset of the format specifiers used in the standard C library's strptime function.
- * @note The caller is responsible for allocating the Time structure (tm).
+ * @note Use the related macro 'strcat_d(...)' for automatic NULL terminating.
+ *
+ * @return A newly allocated string containing the concatenated result. The caller is
+ *         responsible for freeing the allocated memory.
  */
-String strptime(constString buf, constString fmt, struct tm *tm);
+String _dynamic_strcat_impl(constString first, ...);
+
+
+/**
+ * @brief Concatenate multiple strings into a destination string. (string_funcs.h)
+ *
+ * The _static_strcat_impl function concatenates multiple strings into the destination string.
+ *
+ * @param dest The destination string to store the result.
+ * @param first The first string to concatenate.
+ * @param ... Additional strings to concatenate. The last argument must be NULL.
+ * @return The destination string with concatenated content.
+ *
+ * @note The destination string must have enough space to accommodate the concatenated content.
+ * @note Use the related macro
+ */
+String _static_strcat_impl(String dest, constString first, ...);
 
 #endif

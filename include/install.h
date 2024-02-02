@@ -1,3 +1,10 @@
+/*******************************
+ *         install.h           *
+ *    Copyright 2024 AHMZ      *
+ *  AmirHossein MohammadZadeh  *
+ *         402106434           *
+ *     FOP Project NeoGIT      *
+********************************/
 #ifndef __INSTALL_H__
 #define __INSTALL_H__
 

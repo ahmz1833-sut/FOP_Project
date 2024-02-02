@@ -1,3 +1,10 @@
+/*******************************
+ *         phase2.h            *
+ *    Copyright 2024 AHMZ      *
+ *  AmirHossein MohammadZadeh  *
+ *         402106434           *
+ *     FOP Project NeoGIT      *
+********************************/
 #ifndef __PHASE_2_H__
 #define __PHASE_2_H__
 

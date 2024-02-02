@@ -1,3 +1,10 @@
+/*******************************
+ *         phase2.c            *
+ *    Copyright 2024 AHMZ      *
+ *  AmirHossein MohammadZadeh  *
+ *         402106434           *
+ *     FOP Project NeoGIT      *
+********************************/
 #include "phase2.h"
 
 extern String curWorkingDir;	  // Declared in neogit.c
@@ -108,6 +115,7 @@ int command_diff(int argc, constString argv[], bool performActions)
 		}
 		return ERR_NOT_EXIST;
 	}
+	return ERR_ARGS_MISSING;
 }
 
 int command_merge(int argc, constString argv[], bool performActions)

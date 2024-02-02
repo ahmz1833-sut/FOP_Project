@@ -1,76 +1,18 @@
+/*******************************
+ *         neogit.c            *
+ *    Copyright 2024 AHMZ      *
+ *  AmirHossein MohammadZadeh  *
+ *         402106434           *
+ *     FOP Project NeoGIT      *
+ ********************************/
 #include "neogit.h"
 
 // Global variable for cwd (Used in other c files - valued in begining of main())
 String curWorkingDir = NULL;
-// Global variable for current repository (Used in other c files - valued in begining of main())
+// Global variable for current repository (Used in other c files - valued in obtainRepository())
 Repository *curRepository = NULL;
 
-// root path must be absolute / list function must accept abs path and return abs path / relative path to repo passed to print function
-int processTree(FileEntry *root, uint curDepth, int (*listFunction)(FileEntry **, constString), bool print_tree, void (*callbackFunction)(FileEntry *))
-{
-	uint processedEntries = 0;
-	bool isLastBefore[16];
-
-	if (print_tree)
-	{
-		// Extract is last before (in tree prinitng) from bits  of flags
-		for (int i = 4; i < 20; i++)
-			isLastBefore[i - 4] = curDepth & (1 << i);
-		curDepth &= 0xF; // Clear all but lower 4 bits (real curDepth)
-	}
-
-	if (curDepth == 0) // base of recursive
-		return 0;
-
-	static int maxDepth = 0;
-	if (maxDepth < curDepth) // First call
-	{
-		maxDepth = curDepth;
-		// calculate relative path
-		FileEntry fe = getFileEntry(root->path, curRepository->absPath);
-		if (callbackFunction)
-			callbackFunction(&fe);
-		freeFileEntry(&fe, 1);
-	}
-
-	FileEntry *array;
-	uint num = listFunction(&array, root->path);
-	if (!num)
-		return 0;
-
-	for (int i = 0; i < num; i++)
-	{
-		if (print_tree)
-		{
-			for (int j = 0; j <= (maxDepth - curDepth); j++)
-			{
-				if (j != maxDepth - curDepth) // Indentations
-					printf("%s   ", isLastBefore[j] ? " " : "│");
-				else if (isLastBefore[maxDepth - curDepth] = (i == num - 1)) // Last entry of current directory
-					printf("└── ");
-				else
-					printf("├── ");
-			}
-		}
-		FileEntry relativeToRepo = getFileEntry(array[i].path, curRepository->absPath);
-		if (callbackFunction)
-			callbackFunction(&relativeToRepo);
-		if (!relativeToRepo.isDir)
-			processedEntries++;
-		if (array[i].isDir && curDepth > 1 && !isMatch(relativeToRepo.path, "." PROGRAM_NAME))
-		{
-			uint passedInt = curDepth - 1;
-			if (print_tree)
-				for (int i = 4; i < 20; i++)
-					passedInt |= (isLastBefore[i - 4] ? (1 << i) : 0);
-			processedEntries += processTree(&array[i], passedInt, listFunction, print_tree, callbackFunction);
-		}
-		freeFileEntry(&relativeToRepo, 1);
-	}
-	freeFileEntry(array, num);
-	free(array);
-	return processedEntries;
-}
+/////////////////////////// GENERAL FUNCTIONS + CONFIG and ALIAS ////////////////////////
 
 int obtainRepository(constString workDir)
 {
@@ -89,6 +31,7 @@ int obtainRepository(constString workDir)
 		bool found = false;
 		while ((count = ls(&buf, ".")) > 0)
 		{
+			// iterate  over all file entries in buffer to find .neogit folder
 			for (int i = 0; i < count; i++)
 				if (buf[i].isDir && isMatch(getFileName(buf[i].path), "." PROGRAM_NAME))
 				{
@@ -152,14 +95,14 @@ String ـgetconfigpath(bool global)
 	if (global)
 	{
 		// Generate the global configuration path in the user's home directory
-		configPath = strConcat(getenv("HOME"), "/." PROGRAM_NAME "config");
+		configPath = strcat_d(getenv("HOME"), "/." PROGRAM_NAME "config");
 		// Ensure the file exists by creating an empty file
 		system("touch ~/." PROGRAM_NAME "config");
 	}
 	else
 	{
 		// Generate the repository-specific configuration path
-		configPath = strConcat(curRepository->absPath, "/." PROGRAM_NAME "/config");
+		configPath = strcat_d(curRepository->absPath, "/." PROGRAM_NAME "/config");
 		char cmd[PATH_MAX];
 		// Ensure the file exists by creating an empty file
 		sprintf(cmd, "touch \"%s\"", configPath);
@@ -197,10 +140,10 @@ time_t _loadconfig(constString key, String valueDest, bool global)
 		tryWithFile(configFile, configPath, throw(0), throw(0))
 		{
 			// Prepare the format string for reading the configuration line
-			String configFormat = strConcat("[", key, "]:%[^:]:%ld\n");
+			String configFormat = strcat_d("[", key, "]:%[^:]:%ld\n");
 
 			// Create a wildcard pattern to match the key in the configuration file
-			String configWildcard = strConcat("[", key, "]:*:*");
+			String configWildcard = strcat_d("[", key, "]:*:*");
 
 			// Read and parse the configuration file to find the specified key
 			char buf[STR_LINE_MAX];
@@ -229,12 +172,12 @@ int setConfig(constString key, constString value, time_t now, bool global)
 		tryWithFile(configFile, configPath, throw(ERR_FILE_ERROR), throw(_ERR))
 		{
 			// Prepare the format string and line content for the new configuration
-			String configFormat = strConcat("[", key, "]:%s:%ld\n");
+			String configFormat = strcat_d("[", key, "]:%s:%ld\n");
 			String configLineString = malloc(STR_LINE_MAX);
 			sprintf(configLineString, configFormat, value, now);
 
 			// Create a wildcard pattern to match the key in the configuration file
-			String configWildcard = strConcat("[", key, "]:*:*");
+			String configWildcard = strcat_d("[", key, "]:*:*");
 
 			// Search for the line number where the key is located in the configuration file
 			char buf[STR_LINE_MAX];
@@ -284,10 +227,10 @@ int removeConfig(constString key, bool global)
 		tryWithFile(configFile, configPath, throw(ERR_FILE_ERROR), throw(_ERR))
 		{
 			// Prepare the format string for reading the configuration line
-			String configFormat = strConcat("[", key, "]:%[^:]:%ld\n");
+			String configFormat = strcat_d("[", key, "]:%[^:]:%ld\n");
 
 			// Create a wildcard pattern to match the key in the configuration file
-			String configWildcard = strConcat("[", key, "]:*:*");
+			String configWildcard = strcat_d("[", key, "]:*:*");
 
 			// Read and parse the configuration file to find the specified key
 			char buf[STR_LINE_MAX];
@@ -314,8 +257,8 @@ int getAliases(String *keysDest)
 	uint aliasLen = 0;
 
 	// The format for parsing alias configurations in the files
-	String configFormat = strConcat("[alias.%[^]]]:%[^:]:");
-	String configWildcard = strConcat("[alias.*]:*:*");
+	String configFormat = strcat_d("[alias.%[^]]]:%[^:]:");
+	String configWildcard = strcat_d("[alias.*]:*:*");
 	char buf[STR_LINE_MAX];
 	uint lineNum;
 
@@ -368,98 +311,134 @@ int getAliases(String *keysDest)
 	return aliasLen;
 }
 
+///////////////////// FUNCTIONS RELATED TO STAGING AREA / ADD / Status ////////////////////////
+
 bool isGitIgnore(FileEntry *entry)
 {
 	return entry->isDir && isMatch(getFileName(entry->path), ".git");
 }
 
-// the input path must be relative to the repo
-StagedFile *getStagedFile(constString path)
+int trackFile(constString filepath)
 {
-	for (int i = 0; i < curRepository->stagingArea.len; i++)
-		if (!strcmp(curRepository->stagingArea.arr[i].file.path, path))
-			return &(curRepository->stagingArea.arr[i]);
-	return NULL;
-}
+	// Check if the file is already tracked
+	if (isTrackedFile(filepath))
+		return ERR_NOERR;
 
-// the input path must be relative to the repo
-StagedFile *getHEADFile(constString path)
-{
-	for (int i = 0; i < curRepository->head.headFiles.len; i++)
-		if (!strcmp(curRepository->head.headFiles.arr[i].file.path, path))
-			return &(curRepository->head.headFiles.arr[i]);
-	return NULL;
-}
+	// Construct the path to the manifest file
+	char manifestFilePath[PATH_MAX];
+	strcat_s(manifestFilePath, curRepository->absPath, "/." PROGRAM_NAME "/tracked");
 
-// the input path must be relative to the repo
-int removeFromStage(constString filePath)
-{
-	StagedFile *sf = NULL;
-	if (!(sf = getStagedFile(filePath)))
-		return ERR_NOT_EXIST;
+	// Ensure the manifest file exists
+	systemf("touch \"%s\"", manifestFilePath);
 
-	if (!sf->file.isDeleted) // We must delete the staged file
-		withString(oldPath, strConcat(curRepository->absPath, "/." PROGRAM_NAME "/stage", sf->hashStr))
-			remove(oldPath);
-
-	// remove from info file
-	char path[PATH_MAX];
-	strConcatStatic(path, curRepository->absPath, "/." PROGRAM_NAME "/stage/info");
-	tryWithFile(infoFile, path, ({ return ERR_FILE_ERROR; }), __retTry)
+	// Open the manifest file for appending
+	tryWithFile(manifestFile, manifestFilePath, ({ return ERR_FILE_ERROR; }), __retTry)
 	{
-		int error = 0;
-		char pattern[STR_LINE_MAX];
-		sprintf(pattern, "%s:%ld:%u:%s", sf->file.path, sf->file.dateModif, sf->file.permission, sf->hashStr);
-		int res = searchLine(infoFile, pattern);
-		if (res != -1)
-			error = removeLine(infoFile, res);
-		else
-			error = ERR_NOT_EXIST;
-		throw(error);
+		// Append the file path to the manifest file
+		freopen(manifestFilePath, "a+", manifestFile);
+		fputs(filepath, manifestFile);
+		fputc('\n', manifestFile);
 	}
-
-	// Refresh Structs in program
-	fetchStagingArea(curRepository);
-
 	return ERR_NOERR;
 }
 
-// the input path must be relative to the repo
+bool isTrackedFile(constString path)
+{
+	// Construct the path to the manifest file
+	char manifestFilePath[PATH_MAX];
+	strcat_s(manifestFilePath, curRepository->absPath, "/." PROGRAM_NAME "/tracked");
+
+	// Ensure the manifest file exists
+	systemf("touch \"%s\"", manifestFilePath);
+
+	// Open the manifest file for reading
+	tryWithFile(manifestFile, manifestFilePath, ({ return ERR_FILE_ERROR; }), __retTry)
+	{
+		char buf[PATH_MAX];
+		bool found = false;
+		// Iterate through the lines in the manifest file
+		while (fgets(buf, sizeof(buf), manifestFile) != NULL)
+			// Check if the file path matches the current line in the manifest
+			if (isMatch(buf, path))
+			{
+				found = true;
+				break;
+			}
+
+		throw(found);
+	}
+	return false;
+}
+
+ullong generateUniqueId(int hexdigits)
+{
+	// Get the current time
+	time_t currentTime = time(NULL);
+
+	// Convert the time to a string
+	char timestr[20];
+	sprintf(timestr, "%ld", currentTime);
+	String str = timestr;
+
+	// Initialize the hash with a random value
+	ullong hash = rand() * rand();
+
+	// Iterate through the characters in the time string
+	int c;
+	while (c = *(str++))
+		// Update the hash using the current character and random values
+		hash = (((hash << (c % 16))) + hash) + (rand() % c);
+
+	// If the desired length is less than 16, mask the hash to the appropriate length
+	if (hexdigits < 16)
+		hash &= (1ULL << (hexdigits * 4)) - 1;
+
+	return hash;
+}
+
 int addToStage(constString filePath)
 {
-	StagedFile *sf = NULL;
+	// Declare a pointer to StagedFile
+	GitObject *sf = NULL;
+	// Check if the file is already in the staging area
 	if (!(sf = getStagedFile(filePath)))
 	{
-		ADD_EMPTY(curRepository->stagingArea, StagedFile);
+		// If not, allocate memory for a new GitObject in the staging area
+		ADD_EMPTY(curRepository->stagingArea.arr, curRepository->stagingArea.len, GitObject);
 		sf = &(curRepository->stagingArea.arr[curRepository->stagingArea.len - 1]);
 	}
 	else if (!sf->file.isDeleted)
-		withString(oldPath, strConcat(curRepository->absPath, "/." PROGRAM_NAME "/stage", sf->hashStr))
+		// If the file is not deleted, remove the old file from the staging area
+		withString(oldPath, strcat_d(curRepository->absPath, "/." PROGRAM_NAME "/stage", sf->hashStr))
 			remove(oldPath);
 
-	withString(absPath, strConcat(curRepository->absPath, "/", filePath))
+	// Get the absolute path of the file
+	withString(absPath, strcat_d(curRepository->absPath, "/", filePath))
 		sf->file = getFileEntry(absPath, curRepository->absPath);
 
 	if (!(sf->file.isDeleted))
 	{
+		// Generate a unique hash for the file and update GitObject information
 		withString(hash, toHexString(generateUniqueId(10), 10))
 			strcpy(sf->hashStr, hash);
+
+		// Copy the file to the hashed path in the staging area
 		char hashedPath[PATH_MAX];
-		strConcatStatic(hashedPath, "." PROGRAM_NAME "/stage/", sf->hashStr);
+		strcat_s(hashedPath, "." PROGRAM_NAME "/stage/", sf->hashStr);
 		int err = copyFile(sf->file.path, hashedPath, curRepository->absPath);
 		if (err)
 			return err;
 	}
-	else
+	else // If the file is deleted, set a default hash value
 		strcpy(sf->hashStr, "dddddddddd");
 
-	// save information to info file
+	// Save information to the info file
 	char path[PATH_MAX];
-	strConcatStatic(path, curRepository->absPath, "/." PROGRAM_NAME "/stage/info");
+	strcat_s(path, curRepository->absPath, "/." PROGRAM_NAME "/stage/info");
 	systemf("mkdir -p \"%s/." PROGRAM_NAME "/stage\"", curRepository->absPath);
 	systemf("touch \"%s\"", path);
 
-	// add to info file
+	// Add or update information in the info file
 	tryWithFile(infoFile, path, ({ return ERR_FILE_ERROR; }), __retTry)
 	{
 		int error = 0;
@@ -476,332 +455,402 @@ int addToStage(constString filePath)
 	return ERR_NOERR;
 }
 
-// the input path must be relative to the repo
-int trackFile(constString filepath)
+int removeFromStage(constString filePath)
 {
-	if (isTrackedFile(filepath))
-		return ERR_NOERR;
-	char manifestFilePath[PATH_MAX];
-	strConcatStatic(manifestFilePath, curRepository->absPath, "/." PROGRAM_NAME "/tracked");
-	systemf("touch \"%s\"", manifestFilePath);
-	tryWithFile(manifestFile, manifestFilePath, ({ return ERR_FILE_ERROR; }), __retTry)
+	// Declare a pointer to StagedFile
+	GitObject *sf = NULL;
+
+	// Check if the file is in the staging area
+	if (!(sf = getStagedFile(filePath)))
+		return ERR_NOT_EXIST;
+
+	// Remove the staged file if it is not deleted
+	if (!sf->file.isDeleted) // We must delete the staged file
+		withString(oldPath, strcat_d(curRepository->absPath, "/." PROGRAM_NAME "/stage", sf->hashStr))
+			remove(oldPath);
+
+	// Remove information from the info file
+	char path[PATH_MAX];
+	strcat_s(path, curRepository->absPath, "/." PROGRAM_NAME "/stage/info");
+	tryWithFile(infoFile, path, ({ return ERR_FILE_ERROR; }), __retTry)
 	{
-		freopen(manifestFilePath, "a+", manifestFile);
-		fputs(filepath, manifestFile);
-		fputc('\n', manifestFile);
+		int error = 0;
+		char pattern[STR_LINE_MAX];
+		sprintf(pattern, "%s:%ld:%u:%s", sf->file.path, sf->file.dateModif, sf->file.permission, sf->hashStr);
+		int res = searchLine(infoFile, pattern);
+		if (res != -1)
+			error = removeLine(infoFile, res);
+		else
+			error = ERR_NOT_EXIST;
+		throw(error);
+	}
+
+	// Refresh GitObjectArray in the program
+	fetchStagingArea(curRepository);
+
+	return ERR_NOERR;
+}
+
+int backupStagingArea()
+{
+	char tmp[PATH_MAX];
+
+	// Iterate through existing backups and move them to newer versions
+	for (int i = 9; i >= 0; i--)
+	{
+		sprintf(tmp, "%s/." PROGRAM_NAME "/stage/old%d", curRepository->absPath, i);
+		// Check if the backup directory exists
+		if (access(tmp, F_OK) == -1)
+			continue;
+
+		// Move to a newer version or remove if it's the last one
+		tmp[strlen(tmp) - 1] = '\0'; // Truncate and remove the number from the end of the filename
+		if (i == 9)
+			systemf("rm -r \"%s%d\"", tmp, i);
+		else
+			systemf("mv \"%s%d\" \"%s%d\"", tmp, i, tmp, i + 1);
+	}
+
+	// Create a new backup directory (old0) and copy the current staging area to it
+	sprintf(tmp, "%s/." PROGRAM_NAME "/stage", curRepository->absPath);
+	FileEntry *buf = NULL;
+	int res = ls(&buf, tmp);
+	int error = 0;
+	strcat(tmp, "/old0");
+	mkdir(tmp, 0775);
+
+	// Copy each file from the staging area to the backup directory
+	for (int i = 0; i < res; i++)
+		if (!buf[i].isDir)
+			withString(dest, strcat_d(tmp, "/", getFileName(buf[i].path)))
+				error += copyFile(buf[i].path, dest, "");
+
+	// Free the memory used by the list of files
+	freeFileEntry(buf, res);
+	if (buf)
+		free(buf);
+	return error;
+}
+
+int restoreStageingBackup()
+{
+	char tmp[PATH_MAX];
+	sprintf(tmp, "%s/." PROGRAM_NAME "/stage/old0", curRepository->absPath);
+
+	// Check if the backup directory (old0) exists
+	if (access(tmp, F_OK) == -1)
+		return ERR_NOT_EXIST; // check if not exist
+
+	FileEntry *buf = NULL;
+	strcat_s(tmp, curRepository->absPath, "/." PROGRAM_NAME "/stage");
+	int res = ls(&buf, tmp);
+
+	// Remove existing files in the staging area
+	for (int i = 0; i < res; i++)
+		if (!buf[i].isDir)
+			remove(buf[i].path);
+
+	// Free the memory used by the list of files
+	freeFileEntry(buf, res);
+	if (buf)
+		free(buf);
+
+	// Move backed up files from the backup directory (old0) to the staging area
+	char stagePath[PATH_MAX];
+	strcpy(stagePath, tmp);
+	strcat(tmp, "/old0");
+	systemf("mv \"%s\"/* \"%s\" 2>/dev/null", tmp, stagePath); // move back all backed up files
+	systemf("rm -r \"%s\"", tmp);							   // remove backup folder
+
+	// Shift other backups to fill the gap
+	for (int i = 1; i <= 9; i++)
+	{
+		sprintf(tmp, "%s/." PROGRAM_NAME "/stage/old%d", curRepository->absPath, i);
+
+		// Check if  backup directory not exists
+		if (access(tmp, F_OK) == -1)
+			break;
+
+		// Move the top backup to the previous version
+		tmp[strlen(tmp) - 1] = '\0'; // truncate and remove number from end of filename
+		systemf("mv \"%s%d\" \"%s%d\"", tmp, i, tmp, i - 1);
 	}
 	return ERR_NOERR;
 }
 
-// the input path must be relative to the repo
-bool isTrackedFile(constString path)
+GitObject *getStagedFile(constString path)
 {
-	char manifestFilePath[PATH_MAX];
-	strConcatStatic(manifestFilePath, curRepository->absPath, "/." PROGRAM_NAME "/tracked");
-	systemf("touch \"%s\"", manifestFilePath);
-	tryWithFile(manifestFile, manifestFilePath, ({ return ERR_FILE_ERROR; }), __retTry)
-	{
-		char buf[PATH_MAX];
-		while (fgets(buf, sizeof(buf), manifestFile) != NULL)
-			if (isMatch(buf, path))
-				return true;
-	}
+	for (int i = 0; i < curRepository->stagingArea.len; i++)
+		if (!strcmp(curRepository->stagingArea.arr[i].file.path, path))
+			return &(curRepository->stagingArea.arr[i]);
+	return NULL;
 }
 
-// Dangerous function! always pay attention and note down what you are doing.
-int applyToWorkingDir(StagedFileArray head)
+int fetchStagingArea()
 {
-	char manifestFilePath[PATH_MAX];
-	strConcatStatic(manifestFilePath, curRepository->absPath, "/." PROGRAM_NAME "/tracked");
-	systemf("touch \"%s\"", manifestFilePath);
-	tryWithFile(manifestFile, manifestFilePath, ({ return ERR_FILE_ERROR; }), __retTry)
+	// Declare a variable to store the file path
+	char path[PATH_MAX];
+
+	// Free the existing GitObjectArray in the current repository
+	if (curRepository->stagingArea.arr)
 	{
-		// Path of tracking file (relative to repo)
-		char buf[PATH_MAX];
-		// Iterate over tracked files
-		while (fgets(buf, sizeof(buf), manifestFile) != NULL)
+		free(curRepository->stagingArea.arr);
+		curRepository->stagingArea.arr = NULL;
+		curRepository->stagingArea.len = 0;
+	}
+
+	// Open the info file for reading
+	tryWithFile(infoFile, strcat_s(path, curRepository->absPath, "/." PROGRAM_NAME "/stage/info"),
+				({ return ERR_FILE_ERROR; }), __retTry)
+	{
+		char buf[STR_LINE_MAX];
+		// Read the information from the info file
+		while (fgets(buf, STR_LINE_MAX, infoFile) != NULL)
 		{
-			char absPath[PATH_MAX];
-			strtrim(buf);
-			strConcatStatic(absPath, curRepository->absPath, "/", buf);
-			ChangeStatus state = getChangesFromHEAD(buf);
-			switch (state)
+			// Declare variables to store file information
+			char filePath[PATH_MAX];
+			time_t timeM = 0;
+			uint perm = 0;
+			char hash[11];
+
+			// Parse the information from the buffer
+			sscanf(buf, "%[^:]:%ld:%u:%s", filePath, &timeM, &perm, hash);
+
+			// Get the StagedFile corresponding to the file path
+			GitObject *sf = getStagedFile(filePath);
+
+			// If StagedFile does not exist, add it to the GitObjectArray
+			if (sf == NULL)
 			{
-			case ADDED:			 // We have to remove this file from working tree
-				remove(absPath); // DELETE THE FILE IN WORKING TREE !!
-				break;
-			case DELETED:  // We have to add this file to working tree
-			case MODIFIED: // We have to update this file at working tree
-				StagedFile *sf = getHEADFile(buf);
-				char objAbsPath[PATH_MAX];
-				strConcatStatic(objAbsPath, curRepository->absPath, "/." PROGRAM_NAME "/objects/", sf->hashStr);
-				copyFile(objAbsPath, absPath, ""); // REPLACE THE FILE IN WORKING TREE WITH HEAD ONE !!
-				// TODO: set the file(absPath) timestamp to sf->file.dateModif
-				struct utimbuf newTime;
-				newTime.actime = time(NULL);		  // Access time set to now
-				newTime.modtime = sf->file.dateModif; // Modification time is set to the original timestamp
-				utime(absPath, &newTime);
-				break;
+				ADD_EMPTY(curRepository->stagingArea.arr, curRepository->stagingArea.len, GitObject);
+				sf = &(curRepository->stagingArea.arr[curRepository->stagingArea.len - 1]);
+				sf->file.path = strDup(filePath);
 			}
+
+			// Update the StagedFile information
+			strcpy(sf->hashStr, hash);
+			sf->file.dateModif = timeM;
+			sf->file.isDeleted = (strcmp("dddddddddd", hash) == 0);
+			sf->file.permission = perm;
 		}
+		rewind(infoFile);
 	}
 	return ERR_NOERR;
 }
 
-bool isWorkingTreeModified()
-{
-	char manifestFilePath[PATH_MAX];
-	strConcatStatic(manifestFilePath, curRepository->absPath, "/." PROGRAM_NAME "/tracked");
-	systemf("touch \"%s\"", manifestFilePath);
-	tryWithFile(manifestFile, manifestFilePath, ({ return false; }), __retTry)
-	{
-		// Path of tracking file (relative to repo)
-		char buf[PATH_MAX];
-		bool flag = false;
-		// Iterate over tracked files
-		while (fgets(buf, sizeof(buf), manifestFile) != NULL)
-		{
-			strtrim(buf);
-			if (getChangesFromHEAD(buf))
-			{
-				flag = true;
-				break;
-			}
-		}
-		throw(flag);
-	}
-}
-
-// Input paths : abs or rel to cwd
-// paths in Output buf: absolute
-int lsWithHead(FileEntry **buf, constString path)
-{
-	FileEntry *__buf;
-	int __entry_count = ls(&__buf, path);
-	if (__entry_count == -2)
-		return -2; // if path is a file, and exist, return -2
-
-	for (int i = 0; i < curRepository->head.headFiles.len; i++)
-	{
-		FileEntry *entry = &(curRepository->head.headFiles.arr[i].file);
-		char gitEntryAbsPath[PATH_MAX], gitEntryAbsParent[PATH_MAX], inputAbsPath[PATH_MAX];
-		strConcatStatic(gitEntryAbsPath, curRepository->absPath, "/", entry->path); // make abs path of entry
-		getParentName(gitEntryAbsParent, gitEntryAbsPath);							// get entry's parent abs path
-		withString(s, normalizePath(path, NULL))									// get input abs path
-			strcpy(inputAbsPath, s);
-		if (!isMatch(gitEntryAbsParent, inputAbsPath) && !isMatch(gitEntryAbsPath, inputAbsPath))
-			continue;							// doesn't belong to requested path
-		if (access(gitEntryAbsPath, F_OK) == 0) // real file exist!
-			continue;							// already exist in __buf
-
-		if (isMatch(gitEntryAbsPath, inputAbsPath))
-			return -2; // It's File. Not folder!
-
-		if (__entry_count <= 0)
-			__buf = (FileEntry *)malloc((__entry_count = 1) * sizeof(FileEntry));
-		else
-			__buf = (FileEntry *)realloc(__buf, (++__entry_count) * sizeof(FileEntry));
-
-		__buf[__entry_count - 1] = *entry;
-		__buf[__entry_count - 1].isDeleted = true; // because it is not in the working tree now
-	}
-	if(__entry_count > 0) qsort(__buf, __entry_count, sizeof(FileEntry), __file_entry_sort_comparator);
-	*buf = __buf;
-	return __entry_count;
-}
-
-int lsChangedFiles(FileEntry **buf, constString dest)
-{
-	FileEntry *mybuf = NULL;
-	int count = lsWithHead(&mybuf, dest);
-	if (count <= 0)
-		return count;
-
-	int newCount = 0;
-	for (int i = 0; i < count; i++)
-	{
-		FileEntry local = getFileEntry(mybuf[i].path, curRepository->absPath);
-		if ((mybuf[i].isDir && lsChangedFiles(NULL, mybuf[i].path)) ||									// The entry is a dir has changed files
-			(!mybuf[i].isDir && (getChangesFromHEAD(local.path) || getChangesFromStaging(local.path)))) // The entry is a changed file
-		{
-			// add to buf
-			if (isGitIgnore(&local) || isMatch(local.path, ".neogit"))
-				continue;
-			if (buf)
-			{
-				if (newCount == 0)
-					*buf = (FileEntry *)malloc((newCount = 1) * sizeof(FileEntry));
-				else
-					*buf = (FileEntry *)realloc(*buf, (++newCount) * sizeof(FileEntry));
-
-				(*buf)[newCount - 1] = mybuf[i];
-			}
-			else
-				newCount++;
-		}
-		freeFileEntry(&local, 1);
-	}
-	free(mybuf);
-	return newCount;
-}
-
-// the input path must be relative to the repo
-ChangeStatus getChangesFromHEAD(constString path)
-{
-	StagedFile *headFile = getHEADFile(path);
-
-	char abspath[PATH_MAX];
-	strConcatStatic(abspath, curRepository->absPath, "/", path);
-	if (access(abspath, F_OK) != 0) // real file Not Exist
-	{
-		if (headFile == NULL) // this state can not occur (except calling with wrong path)
-			return NOT_CHANGED;
-		if (!(headFile->file.isDeleted)) // Th real file commited before!
-			return DELETED;				 // but it's deleted from working dir
-		else
-			return NOT_CHANGED; // Deleted and Commited before!
-	}
-
-	if (headFile == NULL)
-		return ADDED; // The File is Added after HEAD
-
-	else // commited file and real file are present! compare them.
-	{
-		// absolute
-		char headObjAbsPath[PATH_MAX];
-		FileEntry realFile = getFileEntry(abspath, NULL);
-		freeFileEntry(&realFile, 1);
-		strConcatStatic(headObjAbsPath, curRepository->absPath, "/." PROGRAM_NAME "/objects/", headFile->hashStr);
-		if (headFile->file.isDeleted)
-			return ADDED;
-		else if (!isSameFiles(abspath, headObjAbsPath))
-			return MODIFIED;
-		else if (realFile.permission != headFile->file.permission)
-			return PERM_CHANGED;
-		else
-			return NOT_CHANGED;
-	}
-}
-
-// the input path must be relative to the repo
 ChangeStatus getChangesFromStaging(constString path)
 {
-	StagedFile *stage = getStagedFile(path);
+	// Get the staged file entry
+	GitObject *stage = getStagedFile(path);
+
 	char abspath[PATH_MAX];
-	strConcatStatic(abspath, curRepository->absPath, "/", path);
-	if (access(abspath, F_OK) != 0) // File Not Exist
+	strcat_s(abspath, curRepository->absPath, "/", path);
+
+	// Check if the file does not exist in the working directory
+	if (access(abspath, F_OK) != 0)
 	{
+		// File does not exist in the working directory
+
+		// Check if the file not present in staging area
 		if (stage == NULL)
 			return getChangesFromHEAD(path);
+
+		// Check if the staged file is not marked as deleted
 		if (!(stage->file.isDeleted)) // Th real file staged before!
 			return DELETED;			  // but it's deleted from working dir
 		else
 			return NOT_CHANGED; // Deleted and Staged before!
 	}
 
-	// real File is exist!
+	// Real file exists in the working directory
 
-	if (!isTrackedFile(path)) // Untracked File
+	// Check if the file is untracked
+	if (!isTrackedFile(path))
 		return ADDED;
 	else if (stage == NULL)
 		return getChangesFromHEAD(path);
-	else // staged file and real file are present! compare them.
+	else
 	{
-		// absolute
+		// Both staged file and real file are present, compare them
+
+		// Get the absolute path of the staged object
 		char stagedObjAbsPath[PATH_MAX];
 		FileEntry realFile = getFileEntry(abspath, NULL);
 		freeFileEntry(&realFile, 1);
-		strConcatStatic(stagedObjAbsPath, curRepository->absPath, "/." PROGRAM_NAME "/stage/", stage->hashStr);
+		strcat_s(stagedObjAbsPath, curRepository->absPath, "/." PROGRAM_NAME "/stage/", stage->hashStr);
+
+		// Check if the staged file is marked as deleted
 		if (stage->file.isDeleted)
 			return ADDED;
-		else if (!isSameFiles(abspath, stagedObjAbsPath))
+
+		// Check if the content of the real file and staged file are different
+		else if (!isFilesSame(abspath, stagedObjAbsPath))
 			return MODIFIED;
+
+		// Check if the file permissions are different
 		else if (realFile.permission != stage->file.permission)
 			return PERM_CHANGED;
+
 		else
 			return NOT_CHANGED;
 	}
 }
 
-int setBranchHead(constString branchName, uint64_t commitHash)
+int processTree(FileEntry *root, uint curDepth, int (*listFunction)(FileEntry **, constString), bool print_tree, void (*callbackFunction)(FileEntry *))
 {
-	char path[PATH_MAX];
-	strConcatStatic(path, curRepository->absPath, "/." PROGRAM_NAME "/branches");
-	systemf("touch \"%s\"", path);
-	tryWithFile(branchesFile, path, ({ return ERR_FILE_ERROR; }), __retTry)
-	{
-		char content[STR_LINE_MAX];
-		sprintf(content, "%s:*", branchName);
-		int result = searchLine(branchesFile, content);
-		sprintf(content, "%s:%06lx\n", branchName, commitHash);
-		if (result == -1)
-			result = !fputs(content, freopen(path, "a+", branchesFile));
-		else
-			result = replaceLine(branchesFile, result, content);
-		throw(result);
-	}
-	return ERR_NOERR;
-}
+	uint processedEntries = 0;
+	bool isLastBefore[16];
 
-uint64_t getBranchHead(constString branchName)
-{
-	char path[PATH_MAX];
-	strConcatStatic(path, curRepository->absPath, "/." PROGRAM_NAME "/branches");
-	systemf("touch \"%s\"", path);
-	tryWithFile(branchesFile, path, ({ return ERR_FILE_ERROR; }), __retTry)
+	if (print_tree)
 	{
-		char pattern[STR_LINE_MAX];
-		sprintf(pattern, "%s:*", branchName);
-		int result = searchLine(branchesFile, pattern);
-		if (result == -1)
-			throw(0x1FFFFFF); // branch not exist
-		else
+		// Extract is last before (in tree prinitng) from bits  of flags
+		for (int i = 4; i < 20; i++)
+			isLastBefore[i - 4] = curDepth & (1 << i);
+		curDepth &= 0xF; // Clear all but lower 4 bits (real curDepth)
+	}
+
+	if (curDepth == 0) // base of recursive
+		return 0;
+
+	static int maxDepth = 0;
+	if (maxDepth < curDepth) // First call
+	{
+		maxDepth = curDepth;
+		// calculate relative path
+		FileEntry fe = getFileEntry(root->path, curRepository->absPath);
+		if (callbackFunction)
+			callbackFunction(&fe);
+		freeFileEntry(&fe, 1);
+	}
+
+	FileEntry *array = NULL;
+	int num = listFunction(&array, root->path);
+	if (num <= 0)
+		return 0;
+
+	for (int i = 0; i < num; i++)
+	{
+		if (print_tree)
 		{
-			uint64_t hash = 0;
-			SEEK_TO_LINE(branchesFile, result);
-			strConcatStatic(pattern, branchName, ":%lx");
-			fscanf(branchesFile, pattern, &hash);
-			if (hash == 0)
-				hash = 0xFFFFFF;
-			throw(hash);
+			for (int j = 0; j <= (maxDepth - curDepth); j++)
+			{
+				if (j != maxDepth - curDepth) // Indentations
+					printf("%s   ", isLastBefore[j] ? " " : "│");
+				else if ((isLastBefore[maxDepth - curDepth] = (i == num - 1))) // Last entry of current directory
+					printf("└── ");
+				else
+					printf("├── ");
+			}
 		}
-	}
-	return 0;
-}
-
-uint64_t getBrachHeadPrev(constString branchName, uint order)
-{
-	uint64_t curHash = getBranchHead(branchName);
-	for (int i = 0; i < order; i++)
-	{
-		Commit *commit = getCommit(curHash);
-		if (commit == NULL)
+		FileEntry relativeToRepo = getFileEntry(array[i].path, curRepository->absPath);
+		if (callbackFunction)
+			callbackFunction(&relativeToRepo);
+		if (!relativeToRepo.isDir)
+			processedEntries++;
+		if (array[i].isDir && curDepth > 1 && !isMatch(relativeToRepo.path, "." PROGRAM_NAME))
 		{
-			curHash = 0xFFFFFF;
-			break;
+			uint passedInt = curDepth - 1;
+			if (print_tree)
+				for (int i = 4; i < 20; i++)
+					passedInt |= (isLastBefore[i - 4] ? (1 << i) : 0);
+			processedEntries += processTree(&array[i], passedInt, listFunction, print_tree, callbackFunction);
 		}
-		curHash = commit->prev;
+		freeFileEntry(&relativeToRepo, 1);
 	}
-	return curHash;
+	freeFileEntry(array, num);
+	if (num)
+		free(array);
+	return processedEntries;
 }
 
-int listBranches(String *namesDest, uint64_t *hashesDest)
+int lsWithHead(FileEntry **buf, constString path)
 {
-	int brCount = -1;
-	char path[PATH_MAX];
-	strConcatStatic(path, curRepository->absPath, "/." PROGRAM_NAME "/branches");
-	systemf("touch \"%s\"", path);
-	tryWithFile(branchesFile, path, ({ return -1; }), __retTry)
+	FileEntry *__buf;
+	int __entry_count = ls(&__buf, path);
+	// Check if the specified path is a file and exists
+	if (__entry_count == -2)
+		return -2;
+
+	// Iterate over files in the HEAD commit , check if that are not in the working directory
+	for (int i = 0; i < curRepository->head.headFiles.len; i++)
 	{
-		do
-			namesDest[++brCount] = malloc(STR_LINE_MAX);
-		while (fscanf(branchesFile, "%[^:]:%lx\n", namesDest[brCount], hashesDest + brCount) != EOF);
-		throw(brCount);
+		FileEntry *entry = &(curRepository->head.headFiles.arr[i].file);
+		char gitEntryAbsPath[PATH_MAX], gitEntryAbsParent[PATH_MAX], inputAbsPath[PATH_MAX];
+
+		// Get the absolute path of the file in the HEAD commit
+		strcat_s(gitEntryAbsPath, curRepository->absPath, "/", entry->path);
+		// Get the absolute parent path of the file in the HEAD commit
+		getParentName(gitEntryAbsParent, gitEntryAbsPath);
+		// Get the absolute path of the input directory
+		withString(s, normalizePath(path, NULL))
+			strcpy(inputAbsPath, s);
+
+		// Check if the file belongs to the requested path
+		if (!isMatch(gitEntryAbsParent, inputAbsPath) && !isMatch(gitEntryAbsPath, inputAbsPath))
+			continue; // Doesn't belong to the requested path
+
+		// Check if the file already exists in the working directory
+		if (access(gitEntryAbsPath, F_OK) == 0)
+			continue; // Already exists in __buf
+
+		// Check if the file is a directory
+		if (isMatch(gitEntryAbsPath, inputAbsPath))
+			return -2; // It's File. Not folder!
+
+		// Add the entry to the list
+		ADD_EMPTY(__buf, __entry_count, FileEntry);
+		__buf[__entry_count - 1] = *entry;
+		__buf[__entry_count - 1].isDeleted = true; // because it is not in the working tree now
 	}
+	*buf = __buf;
+	return __entry_count;
 }
 
-// fromWhere : e.g. : "stage"
-Commit *createCommit(StagedFileArray *filesToCommit, String fromWhere, String username, String email, String message)
+bool _ls_head_changed_files = true;
+int lsChangedFiles(FileEntry **buf, constString dest)
+{
+	FileEntry *mybuf = NULL;
+	int count = lsWithHead(&mybuf, dest);
+
+	// Check if there are no entries in the destination directory
+	if (count <= 0)
+		return count;
+
+	// Iterate over entries in the destination directory
+	int newCount = 0;
+	for (int i = 0; i < count; i++)
+	{
+		FileEntry local = getFileEntry(mybuf[i].path, curRepository->absPath);
+		// Check if the entry is a directory with changed files or a changed file
+		if (mybuf[i].isDir || getChangesFromStaging(local.path) || (_ls_head_changed_files && getChangesFromHEAD(local.path))) // The entry is a changed file
+		{
+			// Check if the entry is ignored or .neogit folder
+			if (isGitIgnore(&local) || isMatch(local.path, "." PROGRAM_NAME))
+				continue;
+
+			// continue if directory doesn't have any changed entry
+			if (mybuf[i].isDir && !lsChangedFiles(NULL, mybuf[i].path))
+				continue;
+
+			// Check if the buffer is provided, and add the entry to the buffer
+			if (buf)
+			{
+				ADD_EMPTY(*buf, newCount, FileEntry);
+				(*buf)[newCount - 1] = mybuf[i];
+			}
+			else // else , just increament the counter
+				newCount++;
+		}
+		freeFileEntry(&local, 1);
+	}
+	
+	free(mybuf);
+	return newCount;
+}
+
+///////////////////// FUNCTIONS RELATED TO COMMITS/BRANCH/CHECKOUT/... ////////////////////////
+
+Commit *createCommit(GitObjectArray *filesToCommit, String username, String email, String message)
 {
 	if (curRepository->deatachedHead)
 		return NULL;
@@ -820,7 +869,7 @@ Commit *createCommit(StagedFileArray *filesToCommit, String fromWhere, String us
 	// Update head files
 	for (int i = 0; i < filesToCommit->len; i++)
 	{
-		StagedFile *sf = &(filesToCommit->arr[i]);
+		GitObject *sf = &(filesToCommit->arr[i]);
 		bool found = false;
 		for (int j = 0; j < curRepository->head.headFiles.len; j++)
 		{
@@ -832,7 +881,7 @@ Commit *createCommit(StagedFileArray *filesToCommit, String fromWhere, String us
 		}
 		if (!found)
 		{
-			ADD_EMPTY(curRepository->head.headFiles, StagedFile);
+			ADD_EMPTY(curRepository->head.headFiles.arr, curRepository->head.headFiles.len, GitObject);
 			curRepository->head.headFiles.arr[curRepository->head.headFiles.len - 1] = *sf;
 		}
 	}
@@ -840,18 +889,22 @@ Commit *createCommit(StagedFileArray *filesToCommit, String fromWhere, String us
 	newCommit->commitedFiles = *filesToCommit;
 	newCommit->headFiles = curRepository->head.headFiles;
 
-	// copy objects from (fromWhere) to .neogit/objects
+	// copy objects from .neogit/stage to .neogit/objects
 	for (int i = 0; i < filesToCommit->len; i++)
 	{
 		char p1[PATH_MAX], p2[PATH_MAX];
-		copyFile(strConcatStatic(p1, "." PROGRAM_NAME "/", fromWhere, "/", filesToCommit->arr[i].hashStr),
-				 strConcatStatic(p2, "." PROGRAM_NAME "/objects/", filesToCommit->arr[i].hashStr), curRepository->absPath);
+		if (!filesToCommit->arr[i].file.isDeleted) //  if the file was deleted we don't need it in our object store
+			copyFile(strcat_s(p1, "." PROGRAM_NAME "/stage/", filesToCommit->arr[i].hashStr),
+					 strcat_s(p2, "." PROGRAM_NAME "/objects/", filesToCommit->arr[i].hashStr), curRepository->absPath);
 	}
 
+	// Create commit file path
 	char commitPath[PATH_MAX];
 	sprintf(commitPath, "%s/." PROGRAM_NAME "/commits/%06lx", curRepository->absPath, newCommit->hash);
 	systemf("mkdir -p \"%s/." PROGRAM_NAME "/commits\"", curRepository->absPath);
 	systemf("touch \"%s\"", commitPath);
+
+	// Open and write to the commit file
 	tryWithFile(commitFile, commitPath, ({ return NULL; }), ({ return NULL; }))
 	{
 		// Commit File Structure:
@@ -868,14 +921,14 @@ Commit *createCommit(StagedFileArray *filesToCommit, String fromWhere, String us
 		fprintf(commitFile, "[%u]:[%u]\n", newCommit->commitedFiles.len, newCommit->headFiles.len);
 		for (int i = 0; i < newCommit->commitedFiles.len; i++)
 		{
-			StagedFile *sf = &(newCommit->commitedFiles.arr[i]);
+			GitObject *sf = &(newCommit->commitedFiles.arr[i]);
 			// <path>:<timeModif>:<perm>:<10digitHash>
 			fprintf(commitFile, "%s:%ld:%u:%s\n", sf->file.path, sf->file.dateModif, sf->file.permission, sf->hashStr);
 		}
 		fputs("\n", commitFile);
 		for (int i = 0; i < newCommit->headFiles.len; i++)
 		{
-			StagedFile *sf = &(newCommit->headFiles.arr[i]);
+			GitObject *sf = &(newCommit->headFiles.arr[i]);
 			// <path>:<timeModif>:<perm>:<10digitHash>
 			fprintf(commitFile, "%s:%ld:%u:%s\n", sf->file.path, sf->file.dateModif, sf->file.permission, sf->hashStr);
 		}
@@ -926,8 +979,8 @@ Commit *getCommit(uint64_t hash)
 		commit.branch = strDup(branch);
 		commit.message = strDup(message);
 
-		commit.commitedFiles.arr = malloc(sizeof(StagedFile) * commit.commitedFiles.len);
-		commit.headFiles.arr = malloc(sizeof(StagedFile) * commit.headFiles.len);
+		commit.commitedFiles.arr = malloc(sizeof(GitObject) * commit.commitedFiles.len);
+		commit.headFiles.arr = malloc(sizeof(GitObject) * commit.headFiles.len);
 
 		for (int i = 0; i < commit.commitedFiles.len; i++)
 		{
@@ -937,7 +990,7 @@ Commit *getCommit(uint64_t hash)
 			char hash[11];
 			fscanf(commitFile, "%[^:]:%ld:%u:%s\n", filePath, &timeM, &perm, hash);
 
-			StagedFile *sf = &(commit.commitedFiles.arr[i]);
+			GitObject *sf = &(commit.commitedFiles.arr[i]);
 			sf->file.path = strDup(filePath);
 			strcpy(sf->hashStr, hash);
 			sf->file.dateModif = timeM;
@@ -953,7 +1006,7 @@ Commit *getCommit(uint64_t hash)
 			char hash[11];
 			fscanf(commitFile, "\n%[^:]:%ld:%u:%s\n", filePath, &timeM, &perm, hash);
 
-			StagedFile *sf = &(commit.headFiles.arr[i]);
+			GitObject *sf = &(commit.headFiles.arr[i]);
 			sf->file.path = strDup(filePath);
 			strcpy(sf->hashStr, hash);
 			sf->file.dateModif = timeM;
@@ -969,6 +1022,12 @@ Commit *getCommit(uint64_t hash)
 	return dynamic_allocated_commit;
 }
 
+int removeCommit(uint64_t hash)
+{
+	// TODO :   implement this function
+	return ERR_NOERR;
+}
+
 void freeCommitStruct(Commit *object)
 {
 	if (object)
@@ -981,123 +1040,130 @@ void freeCommitStruct(Commit *object)
 			free(object->useremail);
 		if (object->message)
 			free(object->message);
+
 		if (object->headFiles.arr)
+		{
+			for (int i = 0; i < object->headFiles.len; i++)
+				if (object->headFiles.arr[i].file.path)
+					free(object->headFiles.arr[i].file.path);
 			free(object->headFiles.arr);
+		}
 		if (object->commitedFiles.arr)
+		{
+			for (int i = 0; i < object->commitedFiles.len; i++)
+				if (object->commitedFiles.arr[i].file.path)
+					free(object->commitedFiles.arr[i].file.path);
 			free(object->commitedFiles.arr);
+		}
 		free(object);
 	}
 }
 
-int restoreStageingBackup()
+int listBranches(String *namesDest, uint64_t *hashesDest)
 {
-	char tmp[PATH_MAX];
-	sprintf(tmp, "%s/." PROGRAM_NAME "/stage/old0", curRepository->absPath);
-	if (access(tmp, F_OK) == -1)
-		return ERR_NOT_EXIST; // check if not exist
-
-	FileEntry *buf = NULL;
-	strConcatStatic(tmp, curRepository->absPath, "/." PROGRAM_NAME "/stage");
-	int res = ls(&buf, tmp);
-	int error = 0;
-	for (int i = 0; i < res; i++)
-		if (!buf[i].isDir)
-			remove(buf[i].path);
-	freeFileEntry(buf, res);
-
-	// remove the top stack
-	char stagePath[PATH_MAX];
-	strcpy(stagePath, tmp);
-	strcat(tmp, "/old0");
-	systemf("mv \"%s\"/* \"%s\" 2>/dev/null", tmp, stagePath); // move back all backed up files
-	systemf("rm -r \"%s\"", tmp);							   // remove backup folder
-
-	for (int i = 1; i <= 9; i++)
+	int brCount = -1;
+	char path[PATH_MAX];
+	// Construct the path for the branches file
+	strcat_s(path, curRepository->absPath, "/." PROGRAM_NAME "/branches");
+	// Ensure the branches file exists
+	systemf("touch \"%s\"", path);
+	tryWithFile(branchesFile, path, ({ return -1; }), __retTry)
 	{
-		sprintf(tmp, "%s/." PROGRAM_NAME "/stage/old%d", curRepository->absPath, i);
-		// check if not exist
-		if (access(tmp, F_OK) == -1)
-			break;
+		// Loop through branches file lines and read names and hashes
+		do
+			namesDest[++brCount] = malloc(STR_LINE_MAX);
+		while (fscanf(branchesFile, "%[^:]:%lx\n", namesDest[brCount], hashesDest + brCount) != EOF);
+		throw(brCount);
+	}
+	return 0;
+}
 
-		// move top
-		tmp[strlen(tmp) - 1] = '\0'; // truncate and remove number from end of filename
-		systemf("mv \"%s%d\" \"%s%d\"", tmp, i, tmp, i - 1);
+int setBranchHead(constString branchName, uint64_t commitHash)
+{
+	char path[PATH_MAX];
+
+	// Construct the path for the branches file
+	strcat_s(path, curRepository->absPath, "/." PROGRAM_NAME "/branches");
+
+	// Ensure the branches file exists
+	systemf("touch \"%s\"", path);
+	tryWithFile(branchesFile, path, ({ return ERR_FILE_ERROR; }), __retTry)
+	{
+		char content[STR_LINE_MAX];
+		sprintf(content, "%s:*", branchName);
+
+		// Search for the branch in the branches file
+		int result = searchLine(branchesFile, content);
+
+		// Format the content with the branch name and commit hash
+		sprintf(content, "%s:%06lx\n", branchName, commitHash);
+
+		// If the branch does not exist, append it to the file, otherwise replace the line
+		if (result == -1)
+			result = !fputs(content, freopen(path, "a+", branchesFile));
+		else
+			result = replaceLine(branchesFile, result, content);
+		throw(result);
 	}
 	return ERR_NOERR;
 }
 
-int backupStagingArea()
-{
-	char tmp[PATH_MAX];
-	for (int i = 9; i >= 0; i--)
-	{
-		sprintf(tmp, "%s/." PROGRAM_NAME "/stage/old%d", curRepository->absPath, i);
-		// check if exist
-		if (access(tmp, F_OK) == -1)
-			continue;
-
-		// move to newer one
-		char cmd[PATH_MAX * 2 + 10];
-		tmp[strlen(tmp) - 1] = '\0'; // truncate and remove number from end of filename
-		if (i == 9)
-			sprintf(cmd, "rm -r \"%s%d\"", tmp, i);
-		else
-			sprintf(cmd, "mv \"%s%d\" \"%s%d\"", tmp, i, tmp, i + 1);
-
-		system(cmd);
-	}
-	sprintf(tmp, "%s/." PROGRAM_NAME "/stage", curRepository->absPath);
-	FileEntry *buf = NULL;
-	int res = ls(&buf, tmp);
-	int error = 0;
-	strcat(tmp, "/old0");
-	mkdir(tmp, 0775);
-	for (int i = 0; i < res; i++)
-		if (!buf[i].isDir)
-			withString(dest, strConcat(tmp, "/", getFileName(buf[i].path)))
-				error += copyFile(buf[i].path, dest, "");
-	freeFileEntry(buf, res);
-	return error;
-}
-
-int fetchStagingArea()
+uint64_t getBranchHead(constString branchName)
 {
 	char path[PATH_MAX];
-
-	if (curRepository->stagingArea.arr)
+	strcat_s(path, curRepository->absPath, "/." PROGRAM_NAME "/branches");
+	systemf("touch \"%s\"", path);
+	tryWithFile(branchesFile, path, ({ return ERR_FILE_ERROR; }), __retTry)
 	{
-		free(curRepository->stagingArea.arr);
-		curRepository->stagingArea.arr = NULL;
-		curRepository->stagingArea.len = 0;
-	}
-
-	tryWithFile(infoFile, strConcatStatic(path, curRepository->absPath, "/." PROGRAM_NAME "/stage/info"),
-				({ return ERR_FILE_ERROR; }), __retTry)
-	{
-		char buf[STR_LINE_MAX];
-		int error = 0;
-		while (fgets(buf, STR_LINE_MAX, infoFile) != NULL)
+		char pattern[STR_LINE_MAX];
+		sprintf(pattern, "%s:*", branchName);
+		int result = searchLine(branchesFile, pattern);
+		if (result == -1)
+			throw(0x1FFFFFF); // branch not exist
+		else
 		{
-			char filePath[PATH_MAX];
-			time_t timeM = 0;
-			uint perm = 0;
-			char hash[11];
-			sscanf(buf, "%[^:]:%ld:%u:%s", filePath, &timeM, &perm, hash);
-
-			StagedFile *sf = getStagedFile(filePath);
-			if (sf == NULL)
-			{
-				ADD_EMPTY(curRepository->stagingArea, StagedFile);
-				sf = &(curRepository->stagingArea.arr[curRepository->stagingArea.len - 1]);
-				sf->file.path = strDup(filePath);
-			}
-			strcpy(sf->hashStr, hash);
-			sf->file.dateModif = timeM;
-			sf->file.isDeleted = (strcmp("dddddddddd", hash) == 0);
-			sf->file.permission = perm;
+			uint64_t hash = 0;
+			SEEK_TO_LINE(branchesFile, result);
+			strcat_s(pattern, branchName, ":%lx");
+			fscanf(branchesFile, pattern, &hash);
+			if (hash == 0)
+				hash = 0xFFFFFF;
+			throw(hash);
 		}
-		rewind(infoFile);
 	}
+	return 0;
+}
+
+uint64_t getBrachHeadPrev(constString branchName, uint order)
+{
+	// Get the current commit hash of the branch head
+	uint64_t curHash = getBranchHead(branchName);
+
+	// Iterate through previous commits based on the order parameter
+	for (int i = 0; i < order; i++)
+	{
+		// Retrieve the commit information for the current hash
+		Commit *commit = getCommit(curHash);
+
+		// If the commit is not found, set the hash to 0xFFFFFF and break the loop
+		if (commit == NULL)
+		{
+			curHash = 0xFFFFFF;
+			break;
+		}
+
+		// Update the current hash to the previous commit's hash
+		curHash = commit->prev;
+	}
+	return curHash;
+}
+
+GitObject *getHEADFile(constString path)
+{
+	for (int i = 0; i < curRepository->head.headFiles.len; i++)
+		if (!strcmp(curRepository->head.headFiles.arr[i].file.path, path))
+			return &(curRepository->head.headFiles.arr[i]);
+	return NULL;
 }
 
 int fetchHEAD()
@@ -1109,7 +1175,7 @@ int fetchHEAD()
 	curRepository->head.headFiles.arr = NULL;
 	curRepository->head.headFiles.len = 0;
 
-	strConcatStatic(path, curRepository->absPath, "/." PROGRAM_NAME "/HEAD");
+	strcat_s(path, curRepository->absPath, "/." PROGRAM_NAME "/HEAD");
 	systemf("touch \"%s\"", path);
 
 	char HEAD_content[STR_LINE_MAX] = {0};
@@ -1117,21 +1183,21 @@ int fetchHEAD()
 		fgets(HEAD_content, STR_LINE_MAX, HEADfile);
 
 	Commit *head = NULL;
+	char branch[STR_LINE_MAX];
 	if (isMatch(HEAD_content, "branch/*"))
 	{
-		char branch[STR_LINE_MAX];
 		sscanf(HEAD_content, "branch/%s", branch);
 		curRepository->head.branch = strDup(branch);
 		curRepository->head.hash = getBranchHead(branch) & 0xFFFFFF;
 		head = getCommit(curRepository->head.hash);
 	}
-	else if (isMatch(HEAD_content, "commit/*"))
+	else if (isMatch(HEAD_content, "commit/*:*"))
 	{
 		curRepository->deatachedHead = true;
-		sscanf(HEAD_content, "commit/%lx", &curRepository->head.hash);
+		sscanf(HEAD_content, "commit/%lx:%s", &curRepository->head.hash, branch);
 		head = getCommit(curRepository->head.hash);
 		if (head)
-			curRepository->head.branch = head->branch;
+			curRepository->head.branch = strDup(branch);
 	}
 	else
 		systemf("echo branch/master>\"%s/." PROGRAM_NAME "/HEAD\"", curRepository->absPath);
@@ -1139,18 +1205,124 @@ int fetchHEAD()
 	if (head)
 	{
 		// obtain head files
-		curRepository->head.headFiles = head->headFiles;
-
-		if (head->username)
-			free(head->username);
-		if (head->useremail)
-			free(head->useremail);
-		if (head->message)
-			free(head->message);
-		if (head->commitedFiles.arr)
-			free(head->commitedFiles.arr);
-		// We don't free "branch" and "headFiles arr" (we need them)
-		free(head);
+		curRepository->head.headFiles.arr = malloc(sizeof(GitObject) * head->headFiles.len);
+		curRepository->head.headFiles.len = head->headFiles.len;
+		for (int i = 0; i < head->headFiles.len; i++)
+		{
+			curRepository->head.headFiles.arr[i] = head->headFiles.arr[i];
+			curRepository->head.headFiles.arr[i].file.path = strDup(head->headFiles.arr[i].file.path);
+		}
+		freeCommitStruct(head);
 	}
 	return ERR_NOERR;
 }
+
+ChangeStatus getChangesFromHEAD(constString path)
+{
+	GitObject *headFile = getHEADFile(path);
+
+	char abspath[PATH_MAX];
+	strcat_s(abspath, curRepository->absPath, "/", path);
+	if (access(abspath, F_OK) != 0) // real file Not Exist
+	{
+		if (headFile == NULL) // This state should not occur (except calling with the wrong path)
+			return NOT_CHANGED;
+		if (!(headFile->file.isDeleted))
+			return DELETED; // The real file was committed before but is deleted from the working directory
+		else
+			return NOT_CHANGED; // Deleted and Commited before!
+	}
+
+	if (headFile == NULL)
+		return ADDED; // The file was added after the HEAD commit
+
+	else
+	{
+		// Committed file and real file are present, compare them
+		// absolute
+		char headObjAbsPath[PATH_MAX];
+		FileEntry realFile = getFileEntry(abspath, NULL);
+		freeFileEntry(&realFile, 1);
+		strcat_s(headObjAbsPath, curRepository->absPath, "/." PROGRAM_NAME "/objects/", headFile->hashStr);
+
+		if (headFile->file.isDeleted)
+			return ADDED;
+		else if (!isFilesSame(abspath, headObjAbsPath))
+			return MODIFIED;
+		else if (realFile.permission != headFile->file.permission)
+			return PERM_CHANGED;
+		else
+			return NOT_CHANGED;
+	}
+}
+
+bool isWorkingTreeModified()
+{
+	char manifestFilePath[PATH_MAX];
+	strcat_s(manifestFilePath, curRepository->absPath, "/." PROGRAM_NAME "/tracked");
+	systemf("touch \"%s\"", manifestFilePath);
+	tryWithFile(manifestFile, manifestFilePath, ({ return false; }), __retTry)
+	{
+		// Path of tracking file (relative to repo)
+		char buf[PATH_MAX];
+		bool flag = false;
+		// Iterate over tracked files
+		while (fgets(buf, sizeof(buf), manifestFile) != NULL)
+		{
+			strtrim(buf);
+			if (getChangesFromHEAD(buf))
+			{
+				flag = true;
+				break;
+			}
+		}
+		throw(flag);
+	}
+	return false;
+}
+
+int applyToWorkingDir(GitObjectArray head)
+{
+	char manifestFilePath[PATH_MAX];
+	strcat_s(manifestFilePath, curRepository->absPath, "/." PROGRAM_NAME "/tracked");
+	systemf("touch \"%s\"", manifestFilePath);
+	tryWithFile(manifestFile, manifestFilePath, ({ return ERR_FILE_ERROR; }), __retTry)
+	{
+		// Path of tracking file (relative to repo)
+		char buf[PATH_MAX];
+		// Iterate over tracked files
+		while (fgets(buf, sizeof(buf), manifestFile) != NULL)
+		{
+			char absPath[PATH_MAX];
+			strtrim(buf);
+			strcat_s(absPath, curRepository->absPath, "/", buf);
+			ChangeStatus state = getChangesFromHEAD(buf);
+			switch (state)
+			{
+			case ADDED:			 // We have to remove this file from working tree
+				remove(absPath); // DELETE THE FILE IN WORKING TREE !!
+				break;
+			case DELETED:  // We have to add this file to working tree
+			case MODIFIED: // We have to update this file at working tree
+				GitObject *sf = getHEADFile(buf);
+				char objAbsPath[PATH_MAX];
+				strcat_s(objAbsPath, curRepository->absPath, "/." PROGRAM_NAME "/objects/", sf->hashStr);
+				copyFile(objAbsPath, absPath, ""); // REPLACE THE FILE IN WORKING TREE WITH HEAD ONE !!
+				struct utimbuf newTime;
+				newTime.actime = time(NULL);		  // Access time set to now
+				newTime.modtime = sf->file.dateModif; // Modification time is set to the original timestamp
+				utime(absPath, &newTime);
+				// TODO : set permission
+
+				break;
+			case PERM_CHANGED:
+				// TODO: implement;
+				break;
+			}
+		}
+	}
+	return ERR_NOERR;
+}
+
+///////////////////// FUNCTIONS RELATED TO TAG ////////////////////////
+

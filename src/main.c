@@ -1,11 +1,21 @@
+/*******************************
+ *          main.c             *
+ *    Copyright 2024 AHMZ      *
+ *  AmirHossein MohammadZadeh  *
+ *         402106434           *
+ *     FOP Project NeoGIT      *
+********************************/
 #include "neogit.h"
 #include "install.h"
 #include "phase1.h"
 #include "phase2.h"
 
-// #define __DEBUG_MODE__ "neogit add jjj"
+// #define __DEBUG_MODE__ "neogit", "checkout", "HEAD-1"
+
+// error code variable used in _ERR and try/with/throw
 int _err = 0;
 
+// Array of main commands
 const Command cmds[] = {
     {"init", 2, 2, command_init, CMD_INIT_USAGE},
     {"config", 4, 5, command_config, CMD_CONFIG_USAGE},
@@ -38,11 +48,11 @@ void Welcome();
 #ifdef __DEBUG_MODE__
 int main()
 {
-    constString argv[20];
-    uint argc = tokenizeString(strDup(__DEBUG_MODE__), " ", (String *)argv);
+    // constString argv[20];
+    // uint argc = tokenizeString(strDup(__DEBUG_MODE__), " ", (String *)argv);
 
-    // int argc = 4;
-    // constString argv[] = {"neogit", "config", "alias.src", "neogit init"};
+    constString argv[] = {__DEBUG_MODE__};
+    int argc = sizeof(argv) / sizeof(argv[0]);
 #else
 int main(int argc, constString argv[])
 {
@@ -52,7 +62,6 @@ int main(int argc, constString argv[])
     // Put these into global variables in Global variables in neogit.c
     extern String curWorkingDir; // Declared in neogit.c
     curWorkingDir = getcwd(NULL, PATH_MAX);
-    // extern Repository *curRepository; // Declared in neogit.c
     obtainRepository(curWorkingDir);
 
     if (checkArgument(1, "--uninstall")) // Uninstall Command
@@ -120,7 +129,7 @@ int process_command(int argc, constString argv[], bool performActions)
     if (argc == 2) // Check if command is an alias
     {
         String aliasCommand;
-        withString(alias, strConcat("alias.", argv[1]))
+        withString(alias, strcat_d("alias.", argv[1]))
             aliasCommand = getConfig(alias);
         if (aliasCommand)
         {
@@ -152,5 +161,5 @@ void Welcome()
     if (aliasNum)
         printf("\nConfigured Aliases : \n");
     for (int i = 0; i < aliasNum; i++)
-        printf(_CYAN "%s" _RED " -> " _DFCOLOR "%s\n", aliases[i], getConfig(strConcat("alias.", aliases[i])));
+        printf(_CYAN "%s" _RED " -> " _DFCOLOR "%s\n", aliases[i], getConfig(strcat_d("alias.", aliases[i])));
 }

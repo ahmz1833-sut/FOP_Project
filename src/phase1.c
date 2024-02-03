@@ -159,7 +159,7 @@ int command_config(int argc, constString argv[], bool performActions)
 	if (performActions && !globalFlagIndex && !curRepository)
 		return ERR_NOREPO;
 
-	tryWithString(key, malloc(strlen(argv[keyArgIndex])), ({ return ERR_MALLOC; }), __retTry)
+	tryWithString(key, malloc(strlen(argv[keyArgIndex])+1), ({ return ERR_MALLOC; }), __retTry)
 	{
 		// Extract key and validate it
 		uint invalid = strValidate(key, argv[keyArgIndex], VALID_CHARS);
@@ -181,7 +181,7 @@ int command_config(int argc, constString argv[], bool performActions)
 		}
 
 		// Extract value and validate it
-		tryWithString(value, malloc(strlen(argv[keyArgIndex + 1])), throw(ERR_MALLOC), throw(_err))
+		tryWithString(value, malloc(strlen(argv[keyArgIndex + 1])+1), throw(ERR_MALLOC), throw(_err))
 		{
 			invalid += strValidate(value, argv[keyArgIndex + 1], "a-zA-Z0-9.@!~( )/_-");
 			if (invalid)
@@ -474,7 +474,7 @@ int command_reset(int argc, constString argv[], bool performActions)
 				if (res == ERR_NOERR)
 					printf("File removed from stage: " _CYAN "%s\n" _RST, fileE.path);
 				else if (res == ERR_NOT_EXIST)
-					printf(_DIM "Not staged: %s\n" _RST, fileE.path);
+					printf(_DIM "Not staged: %s\n" _UNBOLD _RST, fileE.path);
 				else
 					printError("Error! in removing file: " _BOLD "%s" _UNBOLD ".\n", fileE.path);
 				freeFileEntry(&fileE, 1);
@@ -640,7 +640,7 @@ int command_commit(int argc, constString argv[], bool performActions)
 		strftime(datetime, DATETIME_STR_MAX, DEFAULT_DATETIME_FORMAT, localtime(&res->time));
 		printf("Date and Time : " _BOLD "%s\n" _RST, datetime);
 		printf("on branch " _CYANB "'%s'" _RST " - commit hash " _CYANB "'%06lx'\n" _RST, curRepository->head.branch, curRepository->head.hash);
-		printf(_DIM "[" _BOLD "%u" _UNBOLD _DIM " file(s) commited]\n" _RST, res->commitedFiles.len);
+		printf(_DIM "[" _BOLD "%u" _UNBOLD _DIM " file(s) commited]\n" _UNBOLD _RST, res->commitedFiles.len);
 
 		freeCommitStruct(res);
 	}
@@ -793,7 +793,7 @@ int command_log(int argc, constString argv[], bool performActions)
 		printf("Date and Time : " _BOLD "%s\n" _RST, datetime);
 		printf("Author: " _CYANB "%s <%s>" _RST "\n", commits[i]->username, commits[i]->useremail);
 		printf("Commit Message: " _CYAN "'%s'\n" _RST, boldedMsg);
-		printf(_DIM "[" _BOLD "%u" _UNBOLD _DIM " file(s) commited]\n" _RST, commits[i]->commitedFiles.len);
+		printf(_DIM "[" _BOLD "%u" _UNBOLD _DIM " file(s) commited]\n" _UNBOLD _RST, commits[i]->commitedFiles.len);
 
 		printf("\n");
 		printedLogCount++;

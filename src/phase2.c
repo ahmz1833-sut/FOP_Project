@@ -12,14 +12,12 @@ extern Repository *curRepository; // Declared in neogit.c
 
 int command_revert(int argc, constString argv[], bool performActions)
 {
+
 }
 
 int command_tag(int argc, constString argv[], bool performActions)
 {
-}
-
-int command_stash(int argc, constString argv[], bool performActions)
-{
+	
 }
 
 int command_grep(int argc, constString argv[], bool performActions)

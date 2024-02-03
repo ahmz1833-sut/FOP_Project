@@ -60,7 +60,7 @@ int main(int argc, constString argv[])
 {
 #endif
 
-    // atexit(foo)
+    atexit(foo);
 
     // Fetch the current working directory and find the repo in parents if found
     // Put these into global variables in Global variables in neogit.c

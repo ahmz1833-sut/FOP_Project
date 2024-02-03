@@ -21,11 +21,6 @@ int command_tag(int argc, constString argv[], bool performActions);
 
 
 
-int command_stash(int argc, constString argv[], bool performActions);
-#define CMD_STASH_USAGE ""
-
-
-
 int command_grep(int argc, constString argv[], bool performActions);
 #define CMD_GREP_USAGE ""
 

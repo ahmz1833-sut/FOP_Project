@@ -42,8 +42,9 @@ int obtainRepository(constString workDir)
 			freeFileEntry(buf, count);
 			free(buf);
 
+			char cwd[PATH_MAX];
 			// If we found repo, or reach root, or error in navigating to parent, break loop;
-			if (found || isMatch(getcwd(NULL, PATH_MAX), "/") || chdir("..") != 0)
+			if (found || isMatch(getcwd(cwd, PATH_MAX), "/") || chdir("..") != 0)
 				break;
 		}
 
@@ -527,7 +528,7 @@ int backupStagingArea()
 
 	// Free the memory used by the list of files
 	freeFileEntry(buf, res);
-	if (buf)
+	if (buf && res > 0)
 		free(buf);
 	return error;
 }
@@ -800,6 +801,8 @@ int lsWithHead(FileEntry **buf, constString path)
 		// Add the entry to the list
 		ADD_EMPTY(__buf, __entry_count, FileEntry);
 		__buf[__entry_count - 1] = *entry;
+		__buf[__entry_count - 1].path = strDup(gitEntryAbsPath);
+		// __buf[]
 		__buf[__entry_count - 1].isDeleted = true; // because it is not in the working tree now
 	}
 	*buf = __buf;
@@ -826,29 +829,56 @@ int lsChangedFiles(FileEntry **buf, constString dest)
 		{
 			// Check if the entry is ignored or .neogit folder
 			if (isGitIgnore(&local) || isMatch(local.path, "." PROGRAM_NAME))
-				continue;
+				goto _continue;
 
 			// continue if directory doesn't have any changed entry
 			if (mybuf[i].isDir && !lsChangedFiles(NULL, mybuf[i].path))
-				continue;
+				goto _continue;
 
 			// Check if the buffer is provided, and add the entry to the buffer
 			if (buf)
 			{
 				ADD_EMPTY(*buf, newCount, FileEntry);
 				(*buf)[newCount - 1] = mybuf[i];
+				((*buf)[newCount - 1]).path = strDup(mybuf[i].path);
 			}
 			else // else , just increament the counter
 				newCount++;
 		}
+	_continue:
 		freeFileEntry(&local, 1);
 	}
-	
+	freeFileEntry(mybuf, count);
 	free(mybuf);
 	return newCount;
 }
 
 ///////////////////// FUNCTIONS RELATED TO COMMITS/BRANCH/CHECKOUT/... ////////////////////////
+
+void copyGitObjectArray(GitObjectArray *dest, GitObjectArray *src)
+{
+	if (dest && src)
+	{
+		dest->arr = malloc(sizeof(GitObject) * (src->len));
+		dest->len = src->len;
+		for (int i = 0; i < src->len; i++)
+		{
+			dest->arr[i] = src->arr[i];
+			dest->arr[i].file.path = strDup(src->arr[i].file.path);
+		}
+	}
+}
+
+void freeGitObjectArray(GitObjectArray *array)
+{
+	if (array->arr)
+	{
+		for (int i = 0; i < array->len; i++)
+			if (array->arr[i].file.path)
+				free(array->arr[i].file.path);
+		free(array->arr);
+	}
+}
 
 Commit *createCommit(GitObjectArray *filesToCommit, String username, String email, String message)
 {
@@ -859,43 +889,37 @@ Commit *createCommit(GitObjectArray *filesToCommit, String username, String emai
 	Commit *newCommit = malloc(sizeof(Commit));
 	newCommit->hash = generateUniqueId(6);
 	newCommit->prev = head->hash;
-	newCommit->branch = head->branch;
+	newCommit->branch = strDup(head->branch);
 	newCommit->message = strDup(message);
 	newCommit->username = strDup(username);
 	newCommit->useremail = strDup(email);
 	newCommit->time = time(NULL);
 	newCommit->mergedCommit = 0;
+	copyGitObjectArray(&newCommit->commitedFiles, filesToCommit);
 
 	// Update head files
-	for (int i = 0; i < filesToCommit->len; i++)
+	copyGitObjectArray(&newCommit->headFiles, &curRepository->head.headFiles);
+	for (int i = 0; i < newCommit->commitedFiles.len; i++)
 	{
-		GitObject *sf = &(filesToCommit->arr[i]);
+		GitObject *sf = &(newCommit->commitedFiles.arr[i]);
 		bool found = false;
-		for (int j = 0; j < curRepository->head.headFiles.len; j++)
+		for (int j = 0; j < newCommit->headFiles.len; j++)
 		{
-			if (!strcmp(curRepository->head.headFiles.arr[j].file.path, sf->file.path))
+			if (!strcmp(newCommit->headFiles.arr[j].file.path, sf->file.path))
 			{
 				found = true;
-				curRepository->head.headFiles.arr[j] = *sf;
+				String __p = newCommit->headFiles.arr[j].file.path;
+				newCommit->headFiles.arr[j] = *sf;
+				newCommit->headFiles.arr[j].file.path = __p;
+				break;
 			}
 		}
 		if (!found)
 		{
-			ADD_EMPTY(curRepository->head.headFiles.arr, curRepository->head.headFiles.len, GitObject);
-			curRepository->head.headFiles.arr[curRepository->head.headFiles.len - 1] = *sf;
+			ADD_EMPTY(newCommit->headFiles.arr, newCommit->headFiles.len, GitObject);
+			newCommit->headFiles.arr[newCommit->headFiles.len - 1] = *sf;
+			newCommit->headFiles.arr[newCommit->headFiles.len - 1].file.path = strDup(sf->file.path);
 		}
-	}
-
-	newCommit->commitedFiles = *filesToCommit;
-	newCommit->headFiles = curRepository->head.headFiles;
-
-	// copy objects from .neogit/stage to .neogit/objects
-	for (int i = 0; i < filesToCommit->len; i++)
-	{
-		char p1[PATH_MAX], p2[PATH_MAX];
-		if (!filesToCommit->arr[i].file.isDeleted) //  if the file was deleted we don't need it in our object store
-			copyFile(strcat_s(p1, "." PROGRAM_NAME "/stage/", filesToCommit->arr[i].hashStr),
-					 strcat_s(p2, "." PROGRAM_NAME "/objects/", filesToCommit->arr[i].hashStr), curRepository->absPath);
 	}
 
 	// Create commit file path
@@ -963,7 +987,10 @@ Commit *getCommit(uint64_t hash)
 		fscanf(commitFile, "%[^:]:%[^:]:%ld:%[^\n]\n", name, email, &(commit.time), branch);
 		if (!*name || !*email || !commit.time || !*branch)
 			throw(0);
-		fscanf(commitFile, "[perv]:%lx\n", &(commit.prev));
+		char str[STR_LINE_MAX];
+		fgets(str, STR_LINE_MAX, commitFile);
+		sscanf(str, "[perv]:%lx:[merged]:%lx\n", &(commit.prev), &(commit.mergedCommit));
+		sscanf(str, "[perv]:%lx", &(commit.prev));
 		if (!commit.prev)
 			throw(0);
 		fscanf(commitFile, "[message]:[%[^]]]\n", message);
@@ -995,6 +1022,7 @@ Commit *getCommit(uint64_t hash)
 			strcpy(sf->hashStr, hash);
 			sf->file.dateModif = timeM;
 			sf->file.isDeleted = (strcmp("dddddddddd", hash) == 0);
+			sf->file.isDir = (strcmp("dirdirdird", hash) == 0);
 			sf->file.permission = perm;
 		}
 
@@ -1011,6 +1039,7 @@ Commit *getCommit(uint64_t hash)
 			strcpy(sf->hashStr, hash);
 			sf->file.dateModif = timeM;
 			sf->file.isDeleted = (strcmp("dddddddddd", hash) == 0);
+			sf->file.isDir = (strcmp("dirdirdird", hash) == 0);
 			sf->file.permission = perm;
 		}
 		if (ferror(commitFile))
@@ -1020,12 +1049,6 @@ Commit *getCommit(uint64_t hash)
 		*dynamic_allocated_commit = commit;
 	}
 	return dynamic_allocated_commit;
-}
-
-int removeCommit(uint64_t hash)
-{
-	// TODO :   implement this function
-	return ERR_NOERR;
 }
 
 void freeCommitStruct(Commit *object)
@@ -1040,21 +1063,8 @@ void freeCommitStruct(Commit *object)
 			free(object->useremail);
 		if (object->message)
 			free(object->message);
-
-		if (object->headFiles.arr)
-		{
-			for (int i = 0; i < object->headFiles.len; i++)
-				if (object->headFiles.arr[i].file.path)
-					free(object->headFiles.arr[i].file.path);
-			free(object->headFiles.arr);
-		}
-		if (object->commitedFiles.arr)
-		{
-			for (int i = 0; i < object->commitedFiles.len; i++)
-				if (object->commitedFiles.arr[i].file.path)
-					free(object->commitedFiles.arr[i].file.path);
-			free(object->commitedFiles.arr);
-		}
+		freeGitObjectArray(&object->commitedFiles);
+		freeGitObjectArray(&object->headFiles);
 		free(object);
 	}
 }
@@ -1154,6 +1164,9 @@ uint64_t getBrachHeadPrev(constString branchName, uint order)
 
 		// Update the current hash to the previous commit's hash
 		curHash = commit->prev;
+
+		// free
+		freeCommitStruct(commit);
 	}
 	return curHash;
 }
@@ -1297,6 +1310,7 @@ int applyToWorkingDir(GitObjectArray head)
 			strtrim(buf);
 			strcat_s(absPath, curRepository->absPath, "/", buf);
 			ChangeStatus state = getChangesFromHEAD(buf);
+			GitObject *sf = getHEADFile(buf);
 			switch (state)
 			{
 			case ADDED:			 // We have to remove this file from working tree
@@ -1304,7 +1318,6 @@ int applyToWorkingDir(GitObjectArray head)
 				break;
 			case DELETED:  // We have to add this file to working tree
 			case MODIFIED: // We have to update this file at working tree
-				GitObject *sf = getHEADFile(buf);
 				char objAbsPath[PATH_MAX];
 				strcat_s(objAbsPath, curRepository->absPath, "/." PROGRAM_NAME "/objects/", sf->hashStr);
 				copyFile(objAbsPath, absPath, ""); // REPLACE THE FILE IN WORKING TREE WITH HEAD ONE !!
@@ -1312,11 +1325,8 @@ int applyToWorkingDir(GitObjectArray head)
 				newTime.actime = time(NULL);		  // Access time set to now
 				newTime.modtime = sf->file.dateModif; // Modification time is set to the original timestamp
 				utime(absPath, &newTime);
-				// TODO : set permission
-
-				break;
 			case PERM_CHANGED:
-				// TODO: implement;
+				chmod(absPath, sf->file.permission);
 				break;
 			}
 		}
@@ -1325,4 +1335,3 @@ int applyToWorkingDir(GitObjectArray head)
 }
 
 ///////////////////// FUNCTIONS RELATED TO TAG ////////////////////////
-

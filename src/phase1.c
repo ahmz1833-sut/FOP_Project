@@ -106,7 +106,6 @@ int __parseLogOptions(int argc, constString argv[], LogOptions *dest)
 	return ERR_NOERR;
 }
 
-
 int command_init(int argc, constString argv[], bool performActions)
 {
 	if (performActions)
@@ -597,8 +596,12 @@ int command_commit(int argc, constString argv[], bool performActions)
 		printWarning("You must first set them by Command(s) below:");
 		if (!name)
 			printWarning(_BOLD "\"" PROGRAM_NAME " config [--global] user.name <yourname>\"" _RST);
+		else
+			free(name);
 		if (!email)
 			printWarning(_BOLD "\"" PROGRAM_NAME " config [--global] user.email <youremail@example.com>\"" _RST);
+		else
+			free(email);
 		return ERR_CONFIG_NOTFOUND;
 	}
 
@@ -611,21 +614,35 @@ int command_commit(int argc, constString argv[], bool performActions)
 	if (curRepository->stagingArea.len == 0)
 	{
 		printWarning("No file staged! Nothing to commit ...");
+		free(name);
+		free(email);
 		return ERR_NOT_EXIST;
 	}
 
 	// Perform the commit
+	// copy objects from .neogit/stage to .neogit/objects
+	for (int i = 0; i < curRepository->stagingArea.len; i++)
+	{
+		char p1[PATH_MAX], p2[PATH_MAX];
+		if (!curRepository->stagingArea.arr[i].file.isDeleted) //  if the file was deleted we don't need it in our object store
+			copyFile(strcat_s(p1, "." PROGRAM_NAME "/stage/", curRepository->stagingArea.arr[i].hashStr),
+					 strcat_s(p2, "." PROGRAM_NAME "/objects/", curRepository->stagingArea.arr[i].hashStr), curRepository->absPath);
+	}
+	// submit the commit
 	Commit *res = createCommit(&curRepository->stagingArea, name, email, message);
+	free(name);
+	free(email);
 	if (res)
 	{
 		systemf("rm -r \"%s/." PROGRAM_NAME "/stage\"/*", curRepository->absPath); // remove staged files
-
 		printf("Successfully performed the commit: " _CYANB "'%s'\n" _RST, message);
 		char datetime[DATETIME_STR_MAX];
 		strftime(datetime, DATETIME_STR_MAX, DEFAULT_DATETIME_FORMAT, localtime(&res->time));
 		printf("Date and Time : " _BOLD "%s\n" _RST, datetime);
 		printf("on branch " _CYANB "'%s'" _RST " - commit hash " _CYANB "'%06lx'\n" _RST, curRepository->head.branch, curRepository->head.hash);
 		printf(_DIM "[" _BOLD "%u" _UNBOLD _DIM " file(s) commited]\n" _RST, res->commitedFiles.len);
+
+		freeCommitStruct(res);
 	}
 	else
 	{
@@ -745,7 +762,8 @@ int command_log(int argc, constString argv[], bool performActions)
 			commitCount--;
 	}
 	freeFileEntry(buf, entryCount);
-	if(buf) free(buf);
+	if (buf)
+		free(buf);
 	qsort(commits, commitCount, sizeof(Commit *), __cmpCommitsByDateDescending); // Sort Commits
 
 	uint printedLogCount = 0;
@@ -817,10 +835,11 @@ int command_branch(int argc, constString argv[], bool performActions)
 				printf(_YELB "%s" _UNBOLD " (DEATACHED HEAD)\n" _RST, branches[i]);
 			else
 				printf("%s\n", branches[i]);
-			
+
 			free(branches[i]);
 		}
-		if(branches[count]) free(branches[count]);
+		if (branches[count])
+			free(branches[count]);
 		if (count < 1)
 			printError("No branch found! (An error occured!)");
 
@@ -891,7 +910,10 @@ int command_checkout(int argc, constString argv[], bool performActions)
 		strcpy(branch, curRepository->head.branch);
 	}
 	else if ((getBranchHead(argv[1]) >> 24) == 0) // branch exist
+	{
 		strcpy(branch, targetStr = argv[1]);
+		hash = getBranchHead(branch);
+	}
 	else if ((sscanf(targetStr = argv[1], "%lx", &hash) == 1) && hash) // try to scan commit hash
 	{
 		Commit *c = getCommit(hash);
@@ -933,9 +955,11 @@ int command_checkout(int argc, constString argv[], bool performActions)
 		return ERR_NOT_COMMITED_CHANGE_FOUND;
 	}
 
+	// If Already on requested commit or branch
 	if ((strcmp(curRepository->head.branch, branch) == 0) && (curRepository->head.hash == hash))
 	{
-		printf("\nAlready on '%s'\n", branch);
+		if(!deatched) printf("\nAlready on " _BOLD "'%s'" _UNBOLD "\n\n", branch);
+		else printf("\nAlready on " _BOLD "'%06lx'" _UNBOLD "\n\n", hash);
 		return ERR_ALREADY_EXIST;
 	}
 

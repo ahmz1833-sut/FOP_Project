@@ -4,16 +4,18 @@
  *  AmirHossein MohammadZadeh  *
  *         402106434           *
  *     FOP Project NeoGIT      *
-********************************/
+ ********************************/
 #include "neogit.h"
 #include "install.h"
 #include "phase1.h"
 #include "phase2.h"
 
-// #define __DEBUG_MODE__ "neogit", "checkout", "HEAD-1"
+// #define __DEBUG_MODE__ "neogit", "status"
 
 // error code variable used in _ERR and try/with/throw
 int _err = 0;
+
+void foo(void) { _exit(0); }
 
 // Array of main commands
 const Command cmds[] = {
@@ -58,6 +60,8 @@ int main(int argc, constString argv[])
 {
 #endif
 
+    // atexit(foo)
+
     // Fetch the current working directory and find the repo in parents if found
     // Put these into global variables in Global variables in neogit.c
     extern String curWorkingDir; // Declared in neogit.c
@@ -74,7 +78,16 @@ int main(int argc, constString argv[])
         promptInstallation(argv[0]);
 
     // Process the command! (and perform it)
-    return process_command(argc, argv, true);
+    int result = process_command(argc, argv, true);
+    extern Repository* curRepository;
+    if(curRepository)
+    {
+        free(curRepository->absPath);
+        free(curRepository->head.branch);
+        freeGitObjectArray(&curRepository->head.headFiles);
+        if(curRepository->stagingArea.len) free(curRepository->stagingArea.arr);
+    }
+    return result;
 }
 
 /* perform the command or check the command syntax */

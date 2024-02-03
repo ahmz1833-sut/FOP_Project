@@ -336,6 +336,25 @@ int lsChangedFiles(FileEntry **buf, constString dest);
 ///////////////////// FUNCTIONS RELATED TO COMMITS/BRANCH/CHECKOUT/... ////////////////////////
 
 /**
+ * @brief Copy a GitObjectArray structure.
+ *
+ * This function copies a GitObjectArray structure, including its fields and arrays to dest
+ *
+ * @param dest destination GitObjectArray (The caller is responsible for freeing the allocated memories)
+ * @param src source GitObjectArray
+ */
+void copyGitObjectArray(GitObjectArray *dest, GitObjectArray *src);
+
+/**
+ * @brief Free the memory allocated for a GitObjectArray structure.
+ *
+ * This function frees the memory allocated for a GitObjectArray structure, including its fields and arrays.
+ *
+ * @param object Pointer to the GitObjectArray structure to be freed.
+ */
+void freeGitObjectArray(GitObjectArray *array);
+
+/**
  * @brief Create a new commit with the specified changes.
  *
  * This function creates a new commit with the specified changes and updates the repository's commit history.
@@ -357,9 +376,6 @@ Commit *createCommit(GitObjectArray *filesToCommit, String username, String emai
  * @return Returns a pointer to the retrieved commit on success, or NULL if the commit is not found or an error occurs.
  */
 Commit *getCommit(uint64_t hash);
-
-// TODO: implement this function
-int removeCommit(uint64_t hash);
 
 /**
  * @brief Free the memory allocated for a Commit structure.
@@ -465,15 +481,15 @@ ChangeStatus getChangesFromHEAD(constString path);
 bool isWorkingTreeModified();
 
 /**
- * @brief Apply changes from the head to the working directory.
+ * @brief Apply changes from the gitObjectArray to the working directory.
  * 
  * This function iterates over the tracked files in the repository and applies
- * changes from the head to the working directory based on the status
+ * changes from the given gitObjectArray to the working directory based on the status
  * of each file.
  * 
  * @warning Dangerous function! always pay attention and note down what you are doing.
  * 
- * @param head The GitObjectArray representing the HEAD commit.
+ * @param head The GitObjectArray that will be applied to working tree
  * @return Returns ERR_NOERR on success; otherwise, returns an error code.
  */
 int applyToWorkingDir(GitObjectArray head);

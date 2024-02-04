@@ -390,7 +390,7 @@ int ls(FileEntry **buf, constString _path)
 			{
 				// Loop through directory entries
 				struct dirent *entry;
-				FileEntry *childs;
+				FileEntry *childs = NULL;
 				uint countOfChilds = 0;
 				while ((entry = readdir(dir)) != NULL)
 				{

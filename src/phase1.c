@@ -21,7 +21,7 @@ void __stage_print_func(FileEntry *element)
 		printf(_GRN _BOLD "%s" _UNBOLD " → Untraked\n" _RST, getFileName(element->path));
 	else if (getChangesFromStaging(element->path)) // Unstaged (Modified)
 		printf(_YEL _BOLD "%s" _UNBOLD " → Modified\n" _RST, getFileName(element->path));
-	else if (getChangesFromHEAD(element->path)) // Staged
+	else if (getChangesFromHEAD(element->path, curRepository->head.headFiles)) // Staged
 		printf(_BOLD "%s" _UNBOLD " → Staged\n" _RST, getFileName(element->path));
 	else // not changed from head commit
 		printf(_BOLD _DIM "%s" _UNBOLD _DIM " → Commited\n" _RST, getFileName(element->path));
@@ -43,7 +43,7 @@ void __status_print_func(FileEntry *element)
 		ChangeStatus changes = getChangesFromStaging(element->path);
 		bool staged = !changes; // FASLE if there is change between working dir and staging area
 		if (staged)
-			changes = getChangesFromHEAD(element->path);
+			changes = getChangesFromHEAD(element->path, curRepository->head.headFiles);
 
 		switch (changes)
 		{
@@ -159,7 +159,7 @@ int command_config(int argc, constString argv[], bool performActions)
 	if (performActions && !globalFlagIndex && !curRepository)
 		return ERR_NOREPO;
 
-	tryWithString(key, malloc(strlen(argv[keyArgIndex])+1), ({ return ERR_MALLOC; }), __retTry)
+	tryWithString(key, malloc(strlen(argv[keyArgIndex]) + 1), ({ return ERR_MALLOC; }), __retTry)
 	{
 		// Extract key and validate it
 		uint invalid = strValidate(key, argv[keyArgIndex], VALID_CHARS);
@@ -181,7 +181,7 @@ int command_config(int argc, constString argv[], bool performActions)
 		}
 
 		// Extract value and validate it
-		tryWithString(value, malloc(strlen(argv[keyArgIndex + 1])+1), throw(ERR_MALLOC), throw(_err))
+		tryWithString(value, malloc(strlen(argv[keyArgIndex + 1]) + 1), throw(ERR_MALLOC), throw(_err))
 		{
 			invalid += strValidate(value, argv[keyArgIndex + 1], "a-zA-Z0-9.@!~( )/_-");
 			if (invalid)
@@ -629,7 +629,7 @@ int command_commit(int argc, constString argv[], bool performActions)
 					 strcat_s(p2, "." PROGRAM_NAME "/objects/", curRepository->stagingArea.arr[i].hashStr), curRepository->absPath);
 	}
 	// submit the commit
-	Commit *res = createCommit(&curRepository->stagingArea, name, email, message);
+	Commit *res = createCommit(&curRepository->stagingArea, name, email, message, 0);
 	free(name);
 	free(email);
 	if (res)
@@ -640,7 +640,7 @@ int command_commit(int argc, constString argv[], bool performActions)
 		strftime(datetime, DATETIME_STR_MAX, DEFAULT_DATETIME_FORMAT, localtime(&res->time));
 		printf("Date and Time : " _BOLD "%s\n" _RST, datetime);
 		printf("on branch " _CYANB "'%s'" _RST " - commit hash " _CYANB "'%06lx'\n" _RST, curRepository->head.branch, curRepository->head.hash);
-		printf(_DIM "[" _BOLD "%u" _UNBOLD _DIM " file(s) commited]\n" _UNBOLD _RST, res->commitedFiles.len);
+		printf(_DIM "[" _BOLD "%u" _UNBOLD _DIM " file(s) commited]\n" _UNBOLD _RST "\n" , res->commitedFiles.len);
 
 		freeCommitStruct(res);
 	}
@@ -893,7 +893,10 @@ int command_checkout(int argc, constString argv[], bool performActions)
 	bool deatched = false;
 
 	if (isMatch(argv[1], "HEAD"))
+	{
 		strcpy(branch, curRepository->head.branch);
+		hash = getBranchHead(branch);
+	}
 	else if (isMatch(argv[1], "HEAD-*"))
 	{
 		uint order = 0;
@@ -958,8 +961,10 @@ int command_checkout(int argc, constString argv[], bool performActions)
 	// If Already on requested commit or branch
 	if ((strcmp(curRepository->head.branch, branch) == 0) && (curRepository->head.hash == hash))
 	{
-		if(!deatched) printf("\nAlready on " _BOLD "'%s'" _UNBOLD "\n\n", branch);
-		else printf("\nAlready on " _BOLD "'%06lx'" _UNBOLD "\n\n", hash);
+		if (!deatched)
+			printf("\nAlready on " _BOLD "'%s'" _UNBOLD "\n\n", branch);
+		else
+			printf("\nAlready on " _BOLD "'%06lx'" _UNBOLD "\n\n", hash);
 		return ERR_ALREADY_EXIST;
 	}
 

@@ -363,9 +363,10 @@ void freeGitObjectArray(GitObjectArray *array);
  * @param username The username of the commit author.
  * @param email The email address of the commit author.
  * @param message The commit message.
+ * @param mergedHash must be zero for normal commits. Provided in Megring Action and merging commits!
  * @return Returns a pointer to the newly created commit on success, or NULL if the commit creation fails.
  */
-Commit *createCommit(GitObjectArray *filesToCommit, String username, String email, String message);
+Commit *createCommit(GitObjectArray *filesToCommit, constString username, constString email, constString message, uint64_t mergedHash);
 
 /**
  * @brief Retrieve a commit by its hash.
@@ -438,15 +439,16 @@ uint64_t getBranchHead(constString branchName);
 uint64_t getBrachHeadPrev(constString branchName, uint order);
 
 /**
- * @brief Retrieves the GitObject corresponding to a file in the HEAD.
+ * @brief Retrieves the GitObject corresponding to a file in the given GitObjectArray
  * 
  * This function searches for the GitObject associated with the specified file path
- * within the HEAD of the repository. The input path <<must be relative to the repository.>>
+ * within the given GitObjectArray. The input path <<must be relative to the repository.>>
  * 
  * @param path <<must be relative to the repository.>>
+ * @param head the GitObjectArray (which search within)
  * @return Returns a pointer to the GitObject if found, otherwise returns NULL.
  */
-GitObject *getHEADFile(constString path);
+GitObject *getHEADFile(constString path, GitObjectArray head);
 
 /**
  * @brief Fetches information related to the HEAD of the repository.
@@ -460,15 +462,16 @@ GitObject *getHEADFile(constString path);
 int fetchHEAD();
 
 /**
- * @brief Determines the status of a file relative to the HEAD in the repository.
+ * @brief Determines the status of a file relative to the given GitObjectArray files.
  * 
  * This function compares the specified file path relative to the repository with
- * its corresponding GitObject in the HEAD to determine its change status.
+ * its corresponding GitObject in the GitObjectArray to determine its change status.
  * 
  * @param path <<must be relative to the repository.>>
- * @return Returns the ChangeStatus indicating the file's status relative to the HEAD. (NULL if not found)
+ * @param head the GitObjectArray
+ * @return Returns the ChangeStatus indicating the file's status relative to the given head array. (NULL if not found)
  */
-ChangeStatus getChangesFromHEAD(constString path);
+ChangeStatus getChangesFromHEAD(constString path, GitObjectArray head);
 
 /**
  * @brief Checks if the working tree is modified compared to the HEAD commit.

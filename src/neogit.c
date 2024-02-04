@@ -29,9 +29,10 @@ int obtainRepository(constString workDir)
 		FileEntry *buf = NULL;
 		int count = 0;
 		bool found = false;
-		while ((count = ls(&buf, ".")) > 0)
+		while (!found)
 		{
-			// iterate  over all file entries in buffer to find .neogit folder
+			// iterate  over all file entries to find .neogit folder
+			count = ls(&buf, ".");
 			for (int i = 0; i < count; i++)
 				if (buf[i].isDir && isMatch(getFileName(buf[i].path), "." PROGRAM_NAME))
 				{
@@ -43,11 +44,11 @@ int obtainRepository(constString workDir)
 			free(buf);
 
 			char cwd[PATH_MAX];
-			// If we found repo, or reach root, or error in navigating to parent, break loop;
+
+			// If we reach root, or error in navigating to parent, break loop;
 			if (found || isMatch(getcwd(cwd, PATH_MAX), "/") || chdir("..") != 0)
 				break;
 		}
-
 		// Change back to the original working directory (Pop from temp variable)
 		chdir(tmpWorkDir);
 	}
@@ -654,7 +655,7 @@ ChangeStatus getChangesFromStaging(constString path)
 
 		// Check if the file not present in staging area
 		if (stage == NULL)
-			return getChangesFromHEAD(path);
+			return getChangesFromHEAD(path, curRepository->head.headFiles);
 
 		// Check if the staged file is not marked as deleted
 		if (!(stage->file.isDeleted)) // Th real file staged before!
@@ -669,7 +670,7 @@ ChangeStatus getChangesFromStaging(constString path)
 	if (!isTrackedFile(path))
 		return ADDED;
 	else if (stage == NULL)
-		return getChangesFromHEAD(path);
+		return getChangesFromHEAD(path, curRepository->head.headFiles);
 	else
 	{
 		// Both staged file and real file are present, compare them
@@ -743,7 +744,8 @@ int processTree(FileEntry *root, uint curDepth, int (*listFunction)(FileEntry **
 					printf("├── ");
 			}
 		}
-		FileEntry relativeToRepo = getFileEntry(array[i].path, curRepository->absPath);
+		FileEntry relativeToRepo = array[i];
+		relativeToRepo.path = normalizePath(array[i].path, curRepository->absPath);
 		if (callbackFunction)
 			callbackFunction(&relativeToRepo);
 		if (!relativeToRepo.isDir)
@@ -786,10 +788,6 @@ int lsWithHead(FileEntry **buf, constString path)
 		withString(s, normalizePath(path, NULL))
 			strcpy(inputAbsPath, s);
 
-		// Check if the file belongs to the requested path
-		if (!isMatch(gitEntryAbsParent, inputAbsPath) && !isMatch(gitEntryAbsPath, inputAbsPath))
-			continue; // Doesn't belong to the requested path
-
 		// Check if the file already exists in the working directory
 		if (access(gitEntryAbsPath, F_OK) == 0)
 			continue; // Already exists in __buf
@@ -798,11 +796,42 @@ int lsWithHead(FileEntry **buf, constString path)
 		if (isMatch(gitEntryAbsPath, inputAbsPath))
 			return -2; // It's File. Not folder!
 
+		// Check if the file belongs to the requested path
+		if (!isMatch(gitEntryAbsParent, inputAbsPath))
+		{
+			// it's probable that this file belongs to subchilds of this root! (a deleted folder!!)
+			String s = normalizePath(gitEntryAbsPath, inputAbsPath);
+
+			if (s != NULL) // Yes!! it's under a deleted folder!
+			{
+				// if the entry has been added  before, don't add again
+				bool found = false;
+				for (int i = 0; i < __entry_count; i++)
+				{
+					if (!strcmp(getFileName(__buf[i].path), strtok(s, "/")))
+					{
+						found = true;
+						break;
+					}
+				}
+				if (!found)
+				{
+					// Add that deleted folder to the list
+					ADD_EMPTY(__buf, __entry_count, FileEntry);
+					__buf[__entry_count - 1].isDeleted = 1;
+					__buf[__entry_count - 1].isDir = 1;
+					__buf[__entry_count - 1].path = strcat_d(inputAbsPath, "/", strtok(s, "/"));
+					__buf[__entry_count - 1].permission = 0777;
+				}
+				free(s);
+			}
+			continue;
+		}
+
 		// Add the entry to the list
 		ADD_EMPTY(__buf, __entry_count, FileEntry);
 		__buf[__entry_count - 1] = *entry;
 		__buf[__entry_count - 1].path = strDup(gitEntryAbsPath);
-		// __buf[]
 		__buf[__entry_count - 1].isDeleted = true; // because it is not in the working tree now
 	}
 	*buf = __buf;
@@ -825,7 +854,7 @@ int lsChangedFiles(FileEntry **buf, constString dest)
 	{
 		FileEntry local = getFileEntry(mybuf[i].path, curRepository->absPath);
 		// Check if the entry is a directory with changed files or a changed file
-		if (mybuf[i].isDir || getChangesFromStaging(local.path) || (_ls_head_changed_files && getChangesFromHEAD(local.path))) // The entry is a changed file
+		if (mybuf[i].isDir || getChangesFromStaging(local.path) || (_ls_head_changed_files && getChangesFromHEAD(local.path, curRepository->head.headFiles))) // The entry is a changed file
 		{
 			// Check if the entry is ignored or .neogit folder
 			if (isGitIgnore(&local) || isMatch(local.path, "." PROGRAM_NAME))
@@ -880,7 +909,7 @@ void freeGitObjectArray(GitObjectArray *array)
 	}
 }
 
-Commit *createCommit(GitObjectArray *filesToCommit, String username, String email, String message)
+Commit *createCommit(GitObjectArray *filesToCommit, constString username, constString email, constString message, uint64_t mergedHash)
 {
 	if (curRepository->deatachedHead)
 		return NULL;
@@ -894,7 +923,7 @@ Commit *createCommit(GitObjectArray *filesToCommit, String username, String emai
 	newCommit->username = strDup(username);
 	newCommit->useremail = strDup(email);
 	newCommit->time = time(NULL);
-	newCommit->mergedCommit = 0;
+	newCommit->mergedCommit = mergedHash;
 	copyGitObjectArray(&newCommit->commitedFiles, filesToCommit);
 
 	// Update head files
@@ -940,7 +969,10 @@ Commit *createCommit(GitObjectArray *filesToCommit, String username, String emai
 		// Line 5+a : \n
 		// Line 6+a -> 5+a+b : HEAD files (same format with staging info)
 		fprintf(commitFile, "%s:%s:%ld:%s\n", newCommit->username, newCommit->useremail, newCommit->time, newCommit->branch);
-		fprintf(commitFile, "[perv]:%06lx\n", newCommit->prev);
+		if (newCommit->mergedCommit)
+			fprintf(commitFile, "[perv]:%06lx:[merged]:%06lx\n", newCommit->prev, newCommit->mergedCommit);
+		else
+			fprintf(commitFile, "[perv]:%06lx\n", newCommit->prev);
 		fprintf(commitFile, "[message]:[%s]\n", message);
 		fprintf(commitFile, "[%u]:[%u]\n", newCommit->commitedFiles.len, newCommit->headFiles.len);
 		for (int i = 0; i < newCommit->commitedFiles.len; i++)
@@ -989,6 +1021,8 @@ Commit *getCommit(uint64_t hash)
 			throw(0);
 		char str[STR_LINE_MAX];
 		fgets(str, STR_LINE_MAX, commitFile);
+		commit.prev = 0xFFFFFF;
+		commit.mergedCommit = 0;
 		sscanf(str, "[perv]:%lx:[merged]:%lx\n", &(commit.prev), &(commit.mergedCommit));
 		sscanf(str, "[perv]:%lx", &(commit.prev));
 		if (!commit.prev)
@@ -1171,11 +1205,11 @@ uint64_t getBrachHeadPrev(constString branchName, uint order)
 	return curHash;
 }
 
-GitObject *getHEADFile(constString path)
+GitObject *getHEADFile(constString path, GitObjectArray head)
 {
-	for (int i = 0; i < curRepository->head.headFiles.len; i++)
-		if (!strcmp(curRepository->head.headFiles.arr[i].file.path, path))
-			return &(curRepository->head.headFiles.arr[i]);
+	for (int i = 0; i < head.len; i++)
+		if (!strcmp(head.arr[i].file.path, path))
+			return &(head.arr[i]);
 	return NULL;
 }
 
@@ -1230,9 +1264,9 @@ int fetchHEAD()
 	return ERR_NOERR;
 }
 
-ChangeStatus getChangesFromHEAD(constString path)
+ChangeStatus getChangesFromHEAD(constString path, GitObjectArray head)
 {
-	GitObject *headFile = getHEADFile(path);
+	GitObject *headFile = getHEADFile(path, head);
 
 	char abspath[PATH_MAX];
 	strcat_s(abspath, curRepository->absPath, "/", path);
@@ -1283,7 +1317,7 @@ bool isWorkingTreeModified()
 		while (fgets(buf, sizeof(buf), manifestFile) != NULL)
 		{
 			strtrim(buf);
-			if (getChangesFromHEAD(buf))
+			if (getChangesFromHEAD(buf, curRepository->head.headFiles))
 			{
 				flag = true;
 				break;
@@ -1309,8 +1343,8 @@ int applyToWorkingDir(GitObjectArray head)
 			char absPath[PATH_MAX];
 			strtrim(buf);
 			strcat_s(absPath, curRepository->absPath, "/", buf);
-			ChangeStatus state = getChangesFromHEAD(buf);
-			GitObject *sf = getHEADFile(buf);
+			ChangeStatus state = getChangesFromHEAD(buf, head);
+			GitObject *sf = getHEADFile(buf, head);
 			switch (state)
 			{
 			case ADDED:			 // We have to remove this file from working tree

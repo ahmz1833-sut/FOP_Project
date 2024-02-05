@@ -770,6 +770,7 @@ int lsWithHead(FileEntry **buf, constString path)
 {
 	FileEntry *__buf;
 	int __entry_count = ls(&__buf, path);
+
 	// Check if the specified path is a file and exists
 	if (__entry_count == -2)
 		return -2;
@@ -900,7 +901,7 @@ void copyGitObjectArray(GitObjectArray *dest, GitObjectArray *src)
 
 void freeGitObjectArray(GitObjectArray *array)
 {
-	if (array->arr)
+	if (array && array->arr)
 	{
 		for (int i = 0; i < array->len; i++)
 			if (array->arr[i].file.path)
@@ -1030,8 +1031,7 @@ Commit *getCommit(uint64_t hash)
 		fscanf(commitFile, "[message]:[%[^]]]\n", message);
 		if (!*message)
 			throw(0);
-		fscanf(commitFile, "[%u]:[%u]\n", &(commit.commitedFiles.len), &(commit.headFiles.len));
-		if (!commit.commitedFiles.len || !commit.headFiles.len)
+		if (fscanf(commitFile, "[%u]:[%u]\n", &(commit.commitedFiles.len), &(commit.headFiles.len)) != 2)
 			throw(0);
 
 		commit.hash = hash;
@@ -1368,4 +1368,88 @@ int applyToWorkingDir(GitObjectArray head)
 	return ERR_NOERR;
 }
 
-///////////////////// FUNCTIONS RELATED TO TAG ////////////////////////
+///////////////////// FUNCTIONS RELATED TO TAG/DIFF/MERGE ////////////////////////
+
+String getMergeDestination(constString branch)
+{
+	uint64_t hash = getBranchHead(branch);
+	Commit *c = getCommit(hash);
+	if (c == NULL)
+		return false;
+	Commit *mergedCommit = getCommit(c->mergedCommit);
+	bool isMerged = mergedCommit && (strcmp(mergedCommit->branch, branch) == 0);
+	freeCommitStruct(mergedCommit);
+	String res = isMerged ? strDup(c->branch) : NULL;
+	freeCommitStruct(c);
+	return res;
+}
+
+void printDiff(Diff *diff, constString f1PathToShow, constString f2PathToShow)
+{
+	printf("File " _CYAN _BOLD "%s" _UNBOLD _DFCOLOR " vs File " _YEL _BOLD "%s" _UNBOLD _DFCOLOR " :\n", f1PathToShow, f2PathToShow);
+
+	if (diff->addedCount != 0 || diff->removedCount != 0)
+	{
+		printf("<<<<<<<<<\n");
+		int i = 0;
+		for (i = 0; i < diff->removedCount && i < diff->addedCount; i++)
+		{
+			printf(_DIM "file " _BOLD "%s" _UNBOLD _DIM " - line %d\n", f1PathToShow, diff->lineNumberRemoved[i]);
+			printf(_DIM "< " _RST _CYAN "%s\n" _RST, diff->linesRemoved[i]);
+			printf(_DIM "file " _BOLD "%s" _UNBOLD _DIM " - line %d\n", f2PathToShow, diff->lineNumberAdded[i]);
+			printf(_DIM "> " _RST _YEL "%s\n" _RST, diff->linesAdded[i]);
+		}
+		for (; i < diff->removedCount; i++)
+		{
+			printf(_DIM "file " _BOLD "%s" _UNBOLD _DIM " - line %d\n", f1PathToShow, diff->lineNumberRemoved[i]);
+			printf(_DIM "< " _RST _CYAN "%s\n" _RST, diff->linesRemoved[i]);
+		}
+		for (; i < diff->addedCount; i++)
+		{
+			printf(_DIM "file " _BOLD "%s" _UNBOLD _DIM " - line %d\n", f2PathToShow, diff->lineNumberAdded[i]);
+			printf(_DIM "> " _RST _YEL "%s\n" _RST, diff->linesAdded[i]);
+		}
+		printf(">>>>>>>>>\n");
+	}
+	else
+		printf(_GRN "No Difference found! (in Text Mode and ignoring empty lines)\n" _RST);
+
+	return;
+}
+
+ConflictingStatus getConflictingStatus(GitObject *targetObj, GitObjectArray base, Diff* diffDest)
+{
+	GitObject *baseObj = getHEADFile(targetObj->file.path, base);
+
+	if (baseObj == NULL) // New object
+		return NEW_FILE;
+	else if (!strcmp(targetObj->hashStr, baseObj->hashStr)) // same object!  no conflicts here :D
+		return SAME_BINARY;
+	else if (!strcmp(targetObj->hashStr, "dddddddddd")) // the target file is marked as deleted
+		return REMOVED_IN_TARGET;
+	else if (!strcmp(baseObj->hashStr, "dddddddddd")) // the file had been deleted from base
+		return REMOVED_IN_BASE;
+	else // the file is persent on  both branches but with different object ref
+	{
+		char baseObjPath[PATH_MAX], targetObjPath[PATH_MAX];
+		strcat_s(baseObjPath, curRepository->absPath, "/." PROGRAM_NAME "/objects/", baseObj->hashStr);
+		strcat_s(targetObjPath, curRepository->absPath, "/." PROGRAM_NAME "/objects/", targetObj->hashStr);
+		if (isFilesSame(baseObjPath, targetObjPath))
+			return SAME_BINARY;
+		else
+		{
+			Diff diff = getDiff(baseObjPath, targetObjPath, 1, -1, 1, -1);
+			if (diff.addedCount == 0 && diff.linesRemoved == 0)
+			{
+				freeDiffStruct(&diff);
+				return SAME_TEXT;
+			}
+			else
+			{
+				*diffDest = diff;
+				return CONFLICT;
+			}
+		}
+	}
+}
+

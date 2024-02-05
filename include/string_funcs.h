@@ -14,6 +14,9 @@
 #include <langinfo.h> // used in strptime implementation
 #include <stddef.h> // used in strptime implementation
 
+
+#define SEARCH_DELIMETERS " \n\r\t.,!?()"
+
 /*!
  * @brief Concatenate constant strings using a macro and return a newly allocated string (string_funcs.h)
  *
@@ -64,6 +67,19 @@
  * @note The returned string is dynamically allocated and should be freed by the caller.
  */
 String boldText(constString s);
+
+
+/**
+ * @brief Make a string bold and underlined. (string_funcs.h)
+ *
+ * The boldText function adds bold and underline formatting to the provided string.
+ *
+ * @param s The input string to be formatted
+ * @return A new string with bold formatting applied.
+ *
+ * @note The returned string is dynamsically allocated and should be freed by the caller.
+ */
+String boldAndUnderlineText(constString s);
 
 
 /**

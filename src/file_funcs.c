@@ -96,23 +96,29 @@ Diff getDiff(constString baseFilePath, constString changedFilePath, int f1begin,
 void freeDiffStruct(Diff *diff)
 {
 	// Free memory for arrays storing added lines and their line numbers
-	if (diff->lineNumberAdded)
-		free(diff->lineNumberAdded);
-	if (diff->linesAdded)
+	if (diff->addedCount)
 	{
-		for (size_t i = 0; i < diff->addedCount; ++i)
-			free(diff->linesAdded[i]);
-		free(diff->linesAdded);
+		if (diff->lineNumberAdded)
+			free(diff->lineNumberAdded);
+		if (diff->linesAdded)
+		{
+			for (size_t i = 0; i < diff->addedCount; ++i)
+				free(diff->linesAdded[i]);
+			free(diff->linesAdded);
+		}
 	}
 
 	// Free memory for arrays storing removed lines and their line numbers
-	if (diff->lineNumberRemoved)
-		free(diff->lineNumberRemoved);
-	if (diff->linesRemoved)
+	if (diff->removedCount)
 	{
-		for (size_t i = 0; i < diff->removedCount; ++i)
-			free(diff->linesRemoved[i]);
-		free(diff->linesRemoved);
+		if (diff->lineNumberRemoved)
+			free(diff->lineNumberRemoved);
+		if (diff->linesRemoved)
+		{
+			for (size_t i = 0; i < diff->removedCount; ++i)
+				free(diff->linesRemoved[i]);
+			free(diff->linesRemoved);
+		}
 	}
 }
 
@@ -276,7 +282,7 @@ int copyFile(constString _src, constString _dest, constString repo)
 String normalizePath(constString _path, constString _repoPath)
 {
 	String absolutePath = NULL;
-	char buf[PATH_MAX];
+	char buf[PATH_MAX], repoPath[PATH_MAX];
 
 	// Attempt to get the real path of the input path.
 	if (realpath(_path, buf) == 0)
@@ -291,23 +297,36 @@ String normalizePath(constString _path, constString _repoPath)
 			strcat(buf, _path);
 		}
 	}
+	while (buf[strlen(buf) - 1] == '/')
+		buf[strlen(buf) - 1] = '\0';
 	absolutePath = buf;
 
 	// Adjust the absolute path based on the repository path if provided.
 	if (_repoPath != NULL && strlen(_repoPath) > 1)
 	{
+		strcpy(repoPath, _repoPath);
+		while (repoPath[strlen(repoPath) - 1] == '/')
+			repoPath[strlen(repoPath) - 1] = '\0';
+		strcat(repoPath, "/");
+		strcat(buf, "/");
+
 		// Check if the path is same with the repository path
-		if (!strcmp(buf, _repoPath))
+		if (!strcmp(buf, repoPath))
 			return strDup(".");
 		// Check if the path is under the repository or not
-		if (strstr(buf, _repoPath) == NULL)
+		if (strstr(buf, repoPath) == NULL)
 			return NULL;
 		// Make the path relative to the repository.
-		absolutePath += strlen(_repoPath) + 1;
+		absolutePath += strlen(repoPath);
+
+		while (absolutePath[strlen(absolutePath) - 1] == '/')
+			absolutePath[strlen(absolutePath) - 1] = '\0';
+
 		// Ensure a non-empty relative path.
 		if (strlen(absolutePath) == 0)
 			strcat(absolutePath, ".");
 	}
+
 	// Return the dynamically allocated normalized path.
 	return strDup(absolutePath);
 }
@@ -403,7 +422,7 @@ int ls(FileEntry **buf, constString _path)
 
 					// Get absolute path of the child entry
 					withString(entryPath, strcat_d(path, "/", entry->d_name))
-					    // Get and store the file entry details
+						// Get and store the file entry details
 						childs[countOfChilds - 1] = getFileEntry(entryPath, NULL);
 				}
 
@@ -421,7 +440,7 @@ int ls(FileEntry **buf, constString _path)
 			}
 		}
 
-        // If path is not a directory, return -2
+		// If path is not a directory, return -2
 		else
 			throw(-2);
 	}

@@ -10,7 +10,7 @@
 #include "phase1.h"
 #include "phase2.h"
 
-// #define __DEBUG_MODE__ "neogit", "revert", "-n", "HEAD-2"
+// #define __DEBUG_MODE__ "neogit", "revert", "-n", "HEAD"
 
 // error code variable used in _ERR and try/with/throw
 int _err = 0;
@@ -31,11 +31,11 @@ const Command cmds[] = {
 	{"log", 2, 15, command_log, CMD_LOG_USAGE},
 	{"branch", 2, 3, command_branch, CMD_BRANCH_USAGE},
 	{"checkout", 3, 3, command_checkout, CMD_CHECKOUT_USAGE},
-	{"revert", 4, 5, command_revert, CMD_REVERT_USAGE},
+	{"revert", 3, 5, command_revert, CMD_REVERT_USAGE},
 	{"tag", 2, 9, command_tag, CMD_TAG_USAGE},
 	{"grep", 6, 9, command_grep, CMD_GREP_USAGE},
 	{"diff", 5, 9, command_diff, CMD_DIFF_USAGE},
-	{"merge", 5, 6, command_merge, CMD_MERGE_USAGE},
+	{"merge", 4, 5, command_merge, CMD_MERGE_USAGE},
 	{NULL, 0, 0, NULL, NULL}}; // End of Commands list
 
 /**

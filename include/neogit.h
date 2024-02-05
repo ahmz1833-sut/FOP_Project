@@ -96,6 +96,17 @@ typedef enum _change_status_t
 	PERM_CHANGED	 /**< File permission changed. */
 } ChangeStatus;
 
+// Enumeration representing the change status of a file
+typedef enum _conflicting_status_t
+{
+	SAME_BINARY = 0,   /**< Two files are completely same in bytes */
+	SAME_TEXT,		   /**< Two files have same text content (with diff) */
+	NEW_FILE,		   /**< A new file added and not found in base */
+	REMOVED_IN_BASE,   /**< Two files are found in both databases, but the base one is marked as deleted */
+	REMOVED_IN_TARGET, /**< Two files are found in both databases, but the target one is marked as deleted */
+	CONFLICT		   /**< Two files are present and have conflicts */
+} ConflictingStatus;
+
 /////////////////////////// GENERAL FUNCTIONS + CONFIG and ALIAS ////////////////////////
 
 /**
@@ -330,8 +341,8 @@ int lsWithHead(FileEntry **buf, constString path);
  * @return Returns the number of entries in the list on success, or an error code if an error occurs during listing.
  */
 int lsChangedFiles(FileEntry **buf, constString dest);
-#define _LIST_FILES_CHANGED_FROM_HEAD ({extern bool _ls_head_changed_files; _ls_head_changed_files=true;})
-#define _LIST_FILES_CHANGED_FROM_STAGE ({extern bool _ls_head_changed_files; _ls_head_changed_files=false;})
+#define _LIST_FILES_CHANGED_FROM_HEAD ({extern bool _ls_head_changed_files; _ls_head_changed_files=true; })
+#define _LIST_FILES_CHANGED_FROM_STAGE ({extern bool _ls_head_changed_files; _ls_head_changed_files=false; })
 
 ///////////////////// FUNCTIONS RELATED TO COMMITS/BRANCH/CHECKOUT/... ////////////////////////
 
@@ -389,7 +400,7 @@ void freeCommitStruct(Commit *object);
 
 /**
  * @brief Lists the branches in the repository, along with their hashes.
- * 
+ *
  * @param namesDest     Pointer to the destination array to store branch names.
  * @param hashesDest    Pointer to the destination array to store branch hashes.
  * @return              The number of branches found or -1 on failure.
@@ -398,10 +409,10 @@ int listBranches(String *namesDest, uint64_t *hashesDest);
 
 /**
  * @brief Sets the head of the specified branch to the given commit hash.
- * 
+ *
  * This function updates the head of the specified branch with the provided
  * commit hash in the branches file. (if branch not exist, creates it.)
- * 
+ *
  * @param branchName    The name of the branch to set the head for.
  * @param commitHash    The commit hash to set as the head for the branch.
  * @return              Returns ERR_NOERR on success, ERR_FILE_ERROR if there
@@ -413,10 +424,10 @@ int setBranchHead(constString branchName, uint64_t commitHash);
 
 /**
  * @brief Retrieves the commit hash associated with the head of the specified branch.
- * 
+ *
  * This function looks up the commit hash associated with the head of the specified
  * branch in the branches file.
- * 
+ *
  * @param branchName    The name of the branch to retrieve the head commit hash for.
  * @return              Returns the commit hash if successful, or 0x1FFFFFF if the
  *                      branch does not exist. If there is an issue with the branches
@@ -426,11 +437,11 @@ uint64_t getBranchHead(constString branchName);
 
 /**
  * @brief Retrieves the commit hash at a specified order before the head of the branch.
- * 
+ *
  * This function retrieves the commit hash at a specified order before the head of
  * the specified branch. It iterates through the previous commits based on the order
  * parameter.
- * 
+ *
  * @param branchName    The name of the branch to retrieve the commit hash for.
  * @param order         The order of the commit to retrieve relative to the head.
  * @return              Returns the commit hash if successful, or 0xFFFFFF if there
@@ -440,10 +451,10 @@ uint64_t getBrachHeadPrev(constString branchName, uint order);
 
 /**
  * @brief Retrieves the GitObject corresponding to a file in the given GitObjectArray
- * 
+ *
  * This function searches for the GitObject associated with the specified file path
  * within the given GitObjectArray. The input path <<must be relative to the repository.>>
- * 
+ *
  * @param path <<must be relative to the repository.>>
  * @param head the GitObjectArray (which search within)
  * @return Returns a pointer to the GitObject if found, otherwise returns NULL.
@@ -452,21 +463,21 @@ GitObject *getHEADFile(constString path, GitObjectArray head);
 
 /**
  * @brief Fetches information related to the HEAD of the repository.
- * 
+ *
  * This function retrieves information about the HEAD of the repository,
  * including the branch name and commit hash. If the HEAD is detached, it
  * sets the 'detachedHead' flag to true. (initialize the curRepository->head)
- * 
+ *
  * @return Returns ERR_NOERR if the operation is successful, otherwise an error code.
  */
 int fetchHEAD();
 
 /**
  * @brief Determines the status of a file relative to the given GitObjectArray files.
- * 
+ *
  * This function compares the specified file path relative to the repository with
  * its corresponding GitObject in the GitObjectArray to determine its change status.
- * 
+ *
  * @param path <<must be relative to the repository.>>
  * @param head the GitObjectArray
  * @return Returns the ChangeStatus indicating the file's status relative to the given head array. (NULL if not found)
@@ -475,7 +486,7 @@ ChangeStatus getChangesFromHEAD(constString path, GitObjectArray head);
 
 /**
  * @brief Checks if the working tree is modified compared to the HEAD commit.
- * 
+ *
  * This function iterates over the tracked files in the repository and checks
  * if there are any changes in the working tree compared to the HEAD commit.
  * @note This function just check the tracked files! not untracked ones!
@@ -485,19 +496,24 @@ bool isWorkingTreeModified();
 
 /**
  * @brief Apply changes from the gitObjectArray to the working directory.
- * 
+ *
  * This function iterates over the tracked files in the repository and applies
  * changes from the given gitObjectArray to the working directory based on the status
  * of each file.
- * 
+ *
  * @warning Dangerous function! always pay attention and note down what you are doing.
- * 
+ *
  * @param head The GitObjectArray that will be applied to working tree
  * @return Returns ERR_NOERR on success; otherwise, returns an error code.
  */
 int applyToWorkingDir(GitObjectArray head);
 
-///////////////////// FUNCTIONS RELATED TO TAG ////////////////////////
+///////////////////// FUNCTIONS RELATED TO MERGE AND TAG ////////////////////////
 
+String getMergeDestination(constString branch);
+
+void printDiff(Diff *diff, constString f1PathToShow, constString f2PathToShow);
+
+ConflictingStatus getConflictingStatus(GitObject *targetObj, GitObjectArray base, Diff* diffDest);
 
 #endif

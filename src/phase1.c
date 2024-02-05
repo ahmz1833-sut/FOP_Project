@@ -131,9 +131,9 @@ int command_init(int argc, constString argv[], bool performActions)
 
 		int err = 0;
 		err |= obtainRepository(curWorkingDir);
-		constString a[] = {"", "master"};
-		err |= command_branch(2, a, true);
-		err |= command_checkout(2, a, true);
+		err |= system("neogit branch master");
+		err |= system("neogit checkout master >/dev/null");
+		printf("\n");
 		return err;
 	}
 	return ERR_NOERR;
@@ -238,8 +238,10 @@ int command_add(int argc, constString argv[], bool performActions)
 		else if (!performActions)
 			return ERR_NOERR;
 
+		printf("\n");
 		FileEntry root = getFileEntry(".", NULL);
 		processTree(&root, atoi(argv[2]), ls, true, __stage_print_func);
+		printf("\n");
 		freeFileEntry(&root, 1);
 		return ERR_NOERR;
 	}
@@ -386,6 +388,8 @@ int command_add(int argc, constString argv[], bool performActions)
 				free(entries);
 		}
 	}
+	if(firstCall)
+		printf("\n\n");
 	return ERR_NOERR;
 }
 
@@ -474,7 +478,7 @@ int command_reset(int argc, constString argv[], bool performActions)
 				if (res == ERR_NOERR)
 					printf("File removed from stage: " _CYAN "%s\n" _RST, fileE.path);
 				else if (res == ERR_NOT_EXIST)
-					printf(_DIM "Not staged: %s\n" _UNBOLD _RST, fileE.path);
+					printf(_DIM "Not staged: %s" _UNBOLD _RST "\n", fileE.path);
 				else
 					printError("Error! in removing file: " _BOLD "%s" _UNBOLD ".\n", fileE.path);
 				freeFileEntry(&fileE, 1);
@@ -628,10 +632,13 @@ int command_commit(int argc, constString argv[], bool performActions)
 			copyFile(strcat_s(p1, "." PROGRAM_NAME "/stage/", curRepository->stagingArea.arr[i].hashStr),
 					 strcat_s(p2, "." PROGRAM_NAME "/objects/", curRepository->stagingArea.arr[i].hashStr), curRepository->absPath);
 	}
+
 	// submit the commit
 	Commit *res = createCommit(&curRepository->stagingArea, name, email, message, 0);
 	free(name);
 	free(email);
+
+	// if successful , print results
 	if (res)
 	{
 		systemf("rm -r \"%s/." PROGRAM_NAME "/stage\"/*", curRepository->absPath); // remove staged files
@@ -640,7 +647,7 @@ int command_commit(int argc, constString argv[], bool performActions)
 		strftime(datetime, DATETIME_STR_MAX, DEFAULT_DATETIME_FORMAT, localtime(&res->time));
 		printf("Date and Time : " _BOLD "%s\n" _RST, datetime);
 		printf("on branch " _CYANB "'%s'" _RST " - commit hash " _CYANB "'%06lx'\n" _RST, curRepository->head.branch, curRepository->head.hash);
-		printf(_DIM "[" _BOLD "%u" _UNBOLD _DIM " file(s) commited]\n" _UNBOLD _RST "\n" , res->commitedFiles.len);
+		printf(_DIM "[" _BOLD "%u" _UNBOLD _DIM " file(s) commited]\n" _UNBOLD _RST "\n", res->commitedFiles.len);
 
 		freeCommitStruct(res);
 	}
@@ -675,7 +682,7 @@ int command_shortcutmsg(int argc, constString argv[], bool performActions)
 	if (strlen(value) > COMMIT_MSG_LEN_MAX)
 	{
 		if (performActions)
-			printError("The message longer than COMMIT_MSG_LEN_MAX.");
+			printError("The message longer than COMMIT_MSG_LEN_MAX.\n");
 		return ERR_GENERAL;
 	}
 
@@ -687,21 +694,21 @@ int command_shortcutmsg(int argc, constString argv[], bool performActions)
 
 	if (checkArgument(0, "set") && getConfig(configKey))
 	{
-		printError("The shortcut key already exist!");
+		printError("The shortcut key already exist!\n");
 		return ERR_ALREADY_EXIST;
 	}
 	else if (checkArgument(0, "replace") && !getConfig(configKey))
 	{
-		printError("The shortcut key does not exist!");
+		printError("The shortcut key does not exist!\n");
 		return ERR_NOT_EXIST;
 	}
 
 	// Perform Acions
 	int err = setConfig(configKey, value, time(NULL), false);
 	if (err == ERR_NOERR)
-		printf("The shortcut " _CYAN "%s" _DFCOLOR " successfully set to message " _CYAN "\"%s\"\n" _RST, configKey + strlen("shortcut/"), value);
+		printf("The shortcut " _CYAN "%s" _DFCOLOR " successfully set to message " _CYAN "\"%s\"\n\n" _RST, configKey + strlen("shortcut/"), value);
 	else
-		printError("Error in set shortcut message!");
+		printError("Error in set shortcut message!\n");
 
 	return err;
 }
@@ -729,9 +736,9 @@ int command_remove(int argc, constString argv[], bool performActions)
 
 	int err = removeConfig(configKey, false);
 	if (err == ERR_NOERR)
-		printf("The shortcut key " _CYAN "%s" _DFCOLOR " removed successfully!\n" _RST, configKey + strlen("shortcut/"));
+		printf("The shortcut key " _CYAN "%s" _DFCOLOR " removed successfully!\n\n" _RST, configKey + strlen("shortcut/"));
 	else
-		printError("Shortcut key does not exist!");
+		printError("Shortcut key does not exist!\n");
 	return err;
 }
 
@@ -767,7 +774,7 @@ int command_log(int argc, constString argv[], bool performActions)
 	qsort(commits, commitCount, sizeof(Commit *), __cmpCommitsByDateDescending); // Sort Commits
 
 	uint printedLogCount = 0;
-	for (uint i = 0; i < commitCount && i < options.n; i++)
+	for (uint i = 0; i < commitCount && printedLogCount < options.n; i++)
 	{
 		if (!isMatch(commits[i]->branch, options.branch))
 			continue;
@@ -779,8 +786,21 @@ int command_log(int argc, constString argv[], bool performActions)
 			continue;
 
 		printf("\nCommit : hash " _YELB "'%06lx'" _RST " on branch " _YELB "'%s'" _RST, commits[i]->hash, commits[i]->branch);
-		if (commits[i]->hash == (getBranchHead(commits[i]->branch) & 0xFFFFFF))
-			printf(_GRN " (%s HEAD)" _RST, commits[i]->branch);
+
+		String _branches[20] = {NULL};
+		uint64_t _branchHeads[20] = {0};
+		int _count = listBranches(_branches, _branchHeads);
+		for (int j = 0; j < _count; j++)
+		{
+			if (_branchHeads[j] == commits[i]->hash)
+				printf(_GRNB " (%s Head)" _RST, _branches[j]);
+			free(_branches[j]);
+		}
+		if (_branches[_count])
+			free(_branches[_count]);
+
+		// if (commits[i]->hash == (getBranchHead(commits[i]->branch) & 0xFFFFFF))
+		// 	printf(_GRN " (%s HEAD)" _RST, commits[i]->branch);
 		if (commits[i]->hash == curRepository->head.hash)
 			printf(" " _REDB "-> HEAD" _RST);
 		printf("\n");
@@ -788,7 +808,10 @@ int command_log(int argc, constString argv[], bool performActions)
 		char datetime[DATETIME_STR_MAX];
 		strftime(datetime, DATETIME_STR_MAX, DEFAULT_DATETIME_FORMAT, localtime(&commits[i]->time));
 		char boldedMsg[STR_MAX];
-		strReplace(boldedMsg, commits[i]->message, options.search, boldText);
+		if(!strcmp(options.search, "*"))
+			strcat_s(boldedMsg, _BOLD, commits[i]->message, _UNBOLD);
+		else
+			strReplace(boldedMsg, commits[i]->message, options.search, boldAndUnderlineText);
 
 		printf("Date and Time : " _BOLD "%s\n" _RST, datetime);
 		printf("Author: " _CYANB "%s <%s>" _RST "\n", commits[i]->username, commits[i]->useremail);
@@ -827,6 +850,7 @@ int command_branch(int argc, constString argv[], bool performActions)
 		String branches[20];
 		uint64_t headHashes[20];
 		int count = listBranches(branches, headHashes);
+		printf("\n");
 		for (int i = 0; i < count; i++)
 		{
 			if (headHashes[i] == curRepository->head.hash && strcmp(curRepository->head.branch, branches[i]) == 0)
@@ -842,7 +866,7 @@ int command_branch(int argc, constString argv[], bool performActions)
 			free(branches[count]);
 		if (count < 1)
 			printError("No branch found! (An error occured!)");
-
+		printf("\n");
 		return ERR_NOERR;
 	}
 	else if (argc == 2) // create branch
@@ -862,16 +886,16 @@ int command_branch(int argc, constString argv[], bool performActions)
 
 		if (getBranchHead(branch) >> 24 == 0) // branch exist
 		{
-			printWarning("The branch %s already exist!", branch);
+			printWarning("The branch %s already exist!\n", branch);
 			return ERR_ALREADY_EXIST;
 		}
 
 		// create new branch
 		int res = setBranchHead(branch, curRepository->head.hash);
 		if (res == ERR_NOERR)
-			printf("The branch " _CYANB "\'%s\'" _RST " created successfully!\n", branch);
+			printf("The branch " _CYANB "\'%s\'" _RST " created successfully!\n\n", branch);
 		else
-			printError("An error occured when creating the branch " _BOLD "%s" _UNBOLD " .", branch);
+			printError("An error occured when creating the branch " _BOLD "%s" _UNBOLD " .\n", branch);
 
 		return res;
 	}
@@ -968,6 +992,23 @@ int command_checkout(int argc, constString argv[], bool performActions)
 		return ERR_ALREADY_EXIST;
 	}
 
+	// check if it's a merged branch
+	String merged = getMergeDestination(branch);
+	if (merged)
+	{
+		if (!deatched)
+		{
+			printWarning("This is a merged branch. You cannot checkout this branch. \n");
+			free((void *)merged);
+			return ERR_GENERAL;
+		}
+		else
+		{
+			strcpy(branch, merged);
+			free((void *)merged);
+		}
+	}
+
 	// change head
 	if (!deatched) // (checkout branch)
 		systemf("echo branch/%s>\"%s/." PROGRAM_NAME "/HEAD\"", branch, curRepository->absPath);
@@ -983,12 +1024,12 @@ apply:
 
 	if (res == ERR_NOERR)
 	{
-		printf("You are checked out to " _CYANB "'%s'" _RST " successfully!\n", targetStr);
+		printf("You are checked out to " _CYANB "'%s'" _RST " successfully!\n\n", targetStr);
 		if (curRepository->deatachedHead)
-			printWarning("You're in DEATACHED HEAD mode!! Don't Chnage working tree files!\nElse, You're responsible for any problem in your repository!!");
+			printWarning("You're in DEATACHED HEAD mode!! Don't Chnage working tree files!\nElse, You're responsible for any problem in your repository!!\n");
 	}
 	else
-		printError("Error in checking out to " _BOLD "'%s'" _UNBOLD " !", targetStr);
+		printError("Error in checking out to " _BOLD "'%s'" _UNBOLD " !\n", targetStr);
 
 	return ERR_NOERR;
 }

@@ -4,12 +4,17 @@
  *  AmirHossein MohammadZadeh  *
  *         402106434           *
  *     FOP Project NeoGIT      *
-********************************/
+ ********************************/
 #include "string_funcs.h"
 
 String boldText(constString s)
 {
 	return strcat_d(_BOLD, s, _UNBOLD);
+}
+
+String boldAndUnderlineText(constString s)
+{
+	return strcat_d(_BOLD _UNDERL, s, _UNBOLD _NOUNDERL);
 }
 
 String strtrim(String s)
@@ -40,9 +45,13 @@ String strDup(constString src)
 	return dest;
 }
 
-int strReplace(String dest, constString text, constString wordPattern, String (*replaceFunction)(constString))
+int strReplace(String dest, constString text, constString _wordPattern, String (*replaceFunction)(constString))
 {
 	int matchedWordCount = 0;
+
+	char wordPattern[STR_MAX];
+	strValidate(wordPattern, _wordPattern, "^" SEARCH_DELIMETERS);
+
 	// Duplicate the input text to avoid modifying the original string
 	String textDup = strDup(text);
 	// Initialize the destination string
@@ -50,11 +59,11 @@ int strReplace(String dest, constString text, constString wordPattern, String (*
 		dest[0] = '\0';
 
 	// Tokenize the duplicated text
-	String token = strtok(textDup, " \n\r\t");
+	String token = strtok(textDup, SEARCH_DELIMETERS);
 	String lastToken = token;
 
 	// Iterate through tokens
-	for (token = strtok(NULL, " \n\r\t"); lastToken; lastToken = token, token = strtok(NULL, " \n\r\t"))
+	for (token = strtok(NULL, SEARCH_DELIMETERS); lastToken; lastToken = token, token = strtok(NULL, " \n\r\t"))
 	{
 		if (isMatch(lastToken, wordPattern))
 		{
@@ -161,11 +170,11 @@ uint strValidate(String dest, constString str, constString allowedChars)
 
 String toHexString(ullong number, int digits)
 {
-    String uniqueString = malloc(digits + 1);
-    char format[10];
-    sprintf(format, "%%0%dllX", digits);
-    sprintf(uniqueString, format, number);
-    return uniqueString;
+	String uniqueString = malloc(digits + 1);
+	char format[10];
+	sprintf(format, "%%0%dllX", digits);
+	sprintf(uniqueString, format, number);
+	return uniqueString;
 }
 
 uint tokenizeString(String str, constString delim, String *destArray)

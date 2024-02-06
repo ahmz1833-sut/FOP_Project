@@ -1447,7 +1447,7 @@ ConflictingStatus getConflictingStatus(GitObject *targetObj, GitObjectArray base
 			}
 			else
 			{
-				*diffDest = diff;
+				if(diffDest) *diffDest = diff;
 				return CONFLICT;
 			}
 		}

@@ -521,18 +521,96 @@ int applyToWorkingDir(GitObjectArray head);
 
 ///////////////////// FUNCTIONS RELATED TO TAG/DIFF/MERGE ////////////////////////
 
+/**
+ * @brief Retrieves the branch to which the specified branch was merged, if any.
+ *
+ * This function checks if the given branch has been merged and returns the name of
+ * the branch to which it was merged. The returned string is dynamically allocated
+ * and should be freed after use.
+ *
+ * @param branch The name of the branch to check for a merged destination.
+ * @return       The name of the merged destination branch or NULL if not merged.
+ *               The returned string should be freed by the caller after use.
+ */
 String getMergeDestination(constString branch);
 
+/**
+ * @brief Prints the difference between two files in a side-by-side format.
+ *
+ * This function displays the differences between two files in a side-by-side format,
+ * showing added and removed lines for each corresponding pair of lines in the files.
+ * It prints the line numbers and the content of the added and removed lines.
+ *
+ * @param diff           The diff structure containing information about the changes.
+ * @param f1PathToShow   The path of the first file to display in the diff.
+ * @param f2PathToShow   The path of the second file to display in the diff.
+ */
 void printDiff(Diff *diff, constString f1PathToShow, constString f2PathToShow);
 
+/**
+ * @brief Determines the conflicting status of a file during a merge.
+ *
+ * This function determines the conflicting status of a file during a merge operation.
+ * It compares the target object with the base object and checks for conflicts.
+ *
+ * @param targetObj  The target Git object.
+ * @param base       An array of Git objects from the base branch.
+ * @param diffDest   Pointer to a Diff structure to store the difference in case of conflict.
+ * 
+ * @note - In case of CONFLICT, if diffDest provided, it will  be filled with diff information; and should be freeDiffStruct after use.
+ * @return           The ConflictingStatus indicating the conflicting status of the file.
+ */
 ConflictingStatus getConflictingStatus(GitObject *targetObj, GitObjectArray base, Diff* diffDest);
 
+/**
+ * @brief Lists tags associated with a commit or all tags in the repository.
+ *
+ * This function retrieves information about tags from the tag manifest file.
+ * If a commit hash is provided, it filters tags associated with that specific commit.
+ * The resulting tags are sorted alphabetically by name.
+ *
+ * @param destBuf      Pointer to the destination buffer to store the tags.
+ * @param commitHash   The commit hash to filter tags (use 0 for all tags).
+ * @return             The number of tags found and stored in the destination buffer.
+ */
 int listTags(Tag **buf, uint64_t commitHash);
 
+/**
+ * @brief Retrieves information about a specific tag.
+ *
+ * This function looks for the specified tag in the tag manifest file and returns
+ * information about that tag if found.
+ *
+ * @param tag_name   The name of the tag to retrieve.
+ * @return           A pointer to the Tag structure containing tag information,
+ *                   or NULL if the tag is not found.
+ */
 Tag *getTag(constString tag_name);
 
+/**
+ * @brief Sets or updates a tag in the tag manifest file.
+ *
+ * This function adds a new tag entry or updates an existing tag entry in the tag manifest file.
+ *
+ * @param tag_name      The name of the tag to set or update.
+ * @param message       The message associated with the tag.
+ * @param commitHash    The hash of the commit the tag points to.
+ * @param author_name   The name of the author of the tag.
+ * @param author_email  The email of the author of the tag.
+ * @param time          The timestamp of the tag.
+ * @return              Returns ERR_NOERR on success, or an error code if an error occurs.
+ */
 int setTag(constString tag_name, constString message, uint64_t commitHash, constString author_name, constString author_email, time_t time);
 
+/**
+ * @brief Frees the memory allocated for an array of Tag structures.
+ *
+ * This function deallocates the memory for each field of each Tag structure in the array,
+ * and then frees the memory of the array itself.
+ *
+ * @param array   The array of Tag structures to be freed.
+ * @param length  The number of elements in the array.
+ */
 void freeTagStruct(Tag *array, uint length);
 
 #endif

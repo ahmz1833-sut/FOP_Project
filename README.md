@@ -42,7 +42,7 @@ For launching NeoGIT in your system, you must compile the project into one execu
 
 ## Author
 
-- AmirHossein MohammadZadeh (CE. student at SUT) [@ahmz1833-sut](https://github.com/ahmz1833-sut)
+- AmirHossein MohammadZadeh 402106434 (CE. student at SUT) [@ahmz1833-sut](https://github.com/ahmz1833-sut)
 
 I'm glad to hear that you found this tutorial helpful! If you have any other questions about Neogit or Git in general, don't hesitate to ask. I'll do my best to help.
 

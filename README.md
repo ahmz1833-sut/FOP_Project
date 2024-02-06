@@ -28,25 +28,17 @@ For launching NeoGIT in your system, you must compile the project into one execu
     ```
     Use command above to init the neogit repository with default branch `master` in your current working directory.
 
-* ### Add Files to Staging Area
-    ```
-    neogit add <file> [file2] [file3] ...
-    ```
-    ```
-    neogit add -redo
-    ```
-    Using 
+* ### Help and Syntax of commands
+	You can use `--help` after each command to see  its help message. For example: `neogit status --help`.
+	* ### Switching Between Branches
+        To list all available branches you can run:
 
-
-```javascript
-import Component from 'my-project'
-
-function App() {
-  return <Component />
-}
-```
 
 
 ## Author
 
 - AmirHossein MohammadZadeh (CE. student at SUT) [@ahmz1833-sut](https://github.com/ahmz1833-sut)
+
+I'm glad to hear that you found this tutorial helpful! If you have any other questions about Neogit or Git in general, don't hesitate to ask. I'll do my best to help.
+
+In the meantime, I would encourage you to continue exploring Neogit and learning more about how it can help you manage your Git repositories. It's a powerful tool that can make working with Git much easier and more efficient.

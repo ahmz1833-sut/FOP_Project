@@ -86,6 +86,17 @@ typedef struct _repository_t
 	bool deatachedHead;			/**< Flag indicating whether the HEAD is detached. */
 } Repository;
 
+// The Tag struct
+typedef struct _tag_t
+{
+	String tagname;
+	String message;
+	uint64_t commitHash;
+	time_t tagTime;
+	String authorName;
+	String authorEmail;
+} Tag;
+
 // Enumeration representing the change status of a file.
 typedef enum _change_status_t
 {
@@ -100,7 +111,7 @@ typedef enum _change_status_t
 typedef enum _conflicting_status_t
 {
 	SAME_BINARY = 0,   /**< Two files are completely same in bytes */
-	SAME_TEXT,		   /**< Two files have same text content (with diff) */
+	SAME_TEXT,		   /**< Two files have same text content (via diff) */
 	NEW_FILE,		   /**< A new file added and not found in base */
 	REMOVED_IN_BASE,   /**< Two files are found in both databases, but the base one is marked as deleted */
 	REMOVED_IN_TARGET, /**< Two files are found in both databases, but the target one is marked as deleted */
@@ -508,12 +519,20 @@ bool isWorkingTreeModified();
  */
 int applyToWorkingDir(GitObjectArray head);
 
-///////////////////// FUNCTIONS RELATED TO MERGE AND TAG ////////////////////////
+///////////////////// FUNCTIONS RELATED TO TAG/DIFF/MERGE ////////////////////////
 
 String getMergeDestination(constString branch);
 
 void printDiff(Diff *diff, constString f1PathToShow, constString f2PathToShow);
 
 ConflictingStatus getConflictingStatus(GitObject *targetObj, GitObjectArray base, Diff* diffDest);
+
+int listTags(Tag **buf, uint64_t commitHash);
+
+Tag *getTag(constString tag_name);
+
+int setTag(constString tag_name, constString message, uint64_t commitHash, constString author_name, constString author_email, time_t time);
+
+void freeTagStruct(Tag *array, uint length);
 
 #endif

@@ -376,10 +376,11 @@ ullong generateUniqueId(int hexdigits)
 {
 	// Get the current time
 	time_t currentTime = time(NULL);
+	clock_t _clock = clock();
 
 	// Convert the time to a string
 	char timestr[20];
-	sprintf(timestr, "%ld", currentTime);
+	sprintf(timestr, "%ld%ld", currentTime, _clock);
 	String str = timestr;
 
 	// Initialize the hash with a random value
@@ -1417,7 +1418,7 @@ void printDiff(Diff *diff, constString f1PathToShow, constString f2PathToShow)
 	return;
 }
 
-ConflictingStatus getConflictingStatus(GitObject *targetObj, GitObjectArray base, Diff* diffDest)
+ConflictingStatus getConflictingStatus(GitObject *targetObj, GitObjectArray base, Diff *diffDest)
 {
 	GitObject *baseObj = getHEADFile(targetObj->file.path, base);
 
@@ -1453,3 +1454,127 @@ ConflictingStatus getConflictingStatus(GitObject *targetObj, GitObjectArray base
 	}
 }
 
+// Comparator function for qsort Tags (Name Ascending)
+int __tag_sort_comparator(const void *a, const void *b)
+{
+	return strcasecmp((((Tag *)a)->tagname), ((Tag *)b)->tagname);
+}
+
+int listTags(Tag **destBuf, uint64_t commitHash)
+{
+	Tag *result = NULL;
+	uint count = 0;
+	char tagManifestPath[PATH_MAX];
+	strcat_s(tagManifestPath, curRepository->absPath, "/.neogit/tags");
+	systemf("touch \"%s\"", tagManifestPath);
+	tryWithFile(tagManifest, tagManifestPath, ({ return 0; }), ({ return count; }))
+	{
+		char buf[STR_LINE_MAX];
+		while (fgets(buf, STR_LINE_MAX, tagManifest))
+		{
+			strtrim(buf);
+			char tag_name[100], message[STR_LINE_MAX], authorName[STR_LINE_MAX], authorEmail[STR_LINE_MAX];
+			uint64_t hash = 0;
+			time_t time = 0;
+
+			if (sscanf(buf, "[%[^]]]:[%[^]]]:%lx:%[^:]:%[^:]:%ld", tag_name, message, &hash, authorName, authorEmail, &time) != 6)
+				continue;
+
+			if (commitHash && (hash != commitHash)) // if commithash filter provided, check the hash
+				continue;
+
+			ADD_EMPTY(result, count, Tag);
+			result[count - 1].tagname = strDup(tag_name);
+			result[count - 1].message = strDup(message);
+			result[count - 1].authorName = strDup(authorName);
+			result[count - 1].authorEmail = strDup(authorEmail);
+			result[count - 1].tagTime = time;
+			result[count - 1].commitHash = hash;
+		}
+		qsort(result, count, sizeof(Tag), __tag_sort_comparator); // sort by name ascending
+		if (destBuf)
+			*destBuf = result;
+		else
+			freeTagStruct(result, count);
+		throw(0);
+	}
+	return count;
+}
+
+Tag *getTag(constString tag_name)
+{
+	Tag *result = NULL;
+	char tagManifestPath[PATH_MAX];
+	strcat_s(tagManifestPath, curRepository->absPath, "/.neogit/tags");
+	systemf("touch \"%s\"", tagManifestPath);
+	tryWithFile(tagManifest, tagManifestPath, ({ return NULL; }), ({ return result; }))
+	{
+		char pattern[STR_LINE_MAX], format[STR_LINE_MAX];
+		sprintf(pattern, "[%s]:[*]:*:*:*:*", tag_name);
+		strcat_s(format, "[", tag_name, "]:[%[^]]]:%lx:%[^:]:%[^:]:%ld");
+		int res = searchLine(tagManifest, pattern);
+		if (res == -1) // if not found
+			throw(0);
+		else // if found
+		{
+			SEEK_TO_LINE(tagManifest, res);
+			char buf[STR_LINE_MAX];
+			if (!fgets(buf, STR_LINE_MAX, tagManifest))
+				throw(0); // return NULL
+			char message[STR_LINE_MAX], authorName[STR_LINE_MAX], authorEmail[STR_LINE_MAX];
+			uint64_t hash = 0;
+			time_t time = 0;
+			if (sscanf(buf, format, message, &hash, authorName, authorEmail, &time) != 5)
+				throw(0); // return NULL
+
+			result = malloc(sizeof(Tag));
+			result->tagname = strDup(tag_name);
+			result->message = strDup(message);
+			result->commitHash = hash;
+			result->tagTime = time;
+			result->authorName = strDup(authorName);
+			result->authorEmail = strDup(authorEmail);
+		}
+
+		throw(0);
+	}
+	return result;
+}
+
+int setTag(constString tag_name, constString message, uint64_t commitHash, constString author_name, constString author_email, time_t time)
+{
+	char tagManifestPath[PATH_MAX];
+	strcat_s(tagManifestPath, curRepository->absPath, "/.neogit/tags");
+	systemf("touch \"%s\"", tagManifestPath);
+	tryWithFile(tagManifest, tagManifestPath, ({ return ERR_FILE_ERROR; }), __retTry)
+	{
+		char format[STR_LINE_MAX], lineStr[STR_LINE_MAX];
+		sprintf(format, "[%s]:[*]:*:*:*:*", tag_name);
+		sprintf(lineStr, "[%s]:[%s]:%06lx:%s:%s:%ld\n", tag_name, message, commitHash, author_name, author_email, time);
+		int res = searchLine(tagManifest, format);
+		if (res == -1)													  // if not found
+			fputs(lineStr, freopen(tagManifestPath, "ab+", tagManifest)); // append line to the file
+		else															  // if found
+			replaceLine(tagManifest, res, lineStr);						  // replace line
+
+		throw(ferror(tagManifest));
+	}
+	return ERR_NOERR;
+}
+
+void freeTagStruct(Tag *array, uint length)
+{
+	if(!array) return;
+	for (int i = 0; i < length; i++)
+	{
+		if (array[i].tagname)
+			free(array[i].tagname);
+		if (array[i].message)
+			free(array[i].message);
+		if (array[i].authorName)
+			free(array[i].authorName);
+		if (array[i].authorEmail)
+			free(array[i].authorEmail);
+	}
+	free(array);
+}

@@ -25,27 +25,27 @@ typedef unsigned char uchar;
 typedef char *String;
 typedef char const *constString;
 
-#define ERR_NOERR 0
-#define ERR_COMMAND_INVALID 1
-#define ERR_ARGS_MISSING 2
-#define ERR_FILE_ERROR 3
-#define ERR_NOREPO 4
-#define ERR_CONFIG_NOTFOUND 5
-#define ERR_ALREADY_EXIST 6
-#define ERR_MALLOC 7
-#define ERR_NOT_EXIST 8
-#define ERR_GENERAL 9
-#define ERR_DEATACHED_HEAD 10
-#define ERR_NOT_COMMITED_CHANGE_FOUND 11
-#define ERR_CONFLICT 12
-#define ERR_UNKNOWN 100
+#define ERR_NOERR						0
+#define ERR_COMMAND_INVALID				1
+#define ERR_ARGS_MISSING				2
+#define ERR_FILE_ERROR					3
+#define ERR_NOREPO						4
+#define ERR_CONFIG_NOTFOUND				5
+#define ERR_ALREADY_EXIST 				6
+#define ERR_MALLOC 						7
+#define ERR_NOT_EXIST 					8
+#define ERR_GENERAL 					9
+#define ERR_DEATACHED_HEAD 				10
+#define ERR_NOT_COMMITED_CHANGE_FOUND 	11
+#define ERR_CONFLICT 					12
+#define ERR_UNKNOWN 					100
 
-#define PATH_MAX 4096
-#define STR_LINE_MAX 5000
-#define STR_MAX 10000
-#define STR_CMD_MAX 10000
-#define COMMIT_MSG_LEN_MAX 72
-#define DATETIME_STR_MAX 50
+#define PATH_MAX					4096
+#define STR_LINE_MAX 				5000
+#define STR_MAX 					10000
+#define STR_CMD_MAX 				10000
+#define COMMIT_MSG_LEN_MAX 			72
+#define DATETIME_STR_MAX 			50
 
 #define DEFAULT_DATETIME_FORMAT "%c %z"
 

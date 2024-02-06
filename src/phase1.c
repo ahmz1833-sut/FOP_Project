@@ -388,7 +388,7 @@ int command_add(int argc, constString argv[], bool performActions)
 				free(entries);
 		}
 	}
-	if(firstCall)
+	if (firstCall)
 		printf("\n\n");
 	return ERR_NOERR;
 }
@@ -773,6 +773,11 @@ int command_log(int argc, constString argv[], bool performActions)
 		free(buf);
 	qsort(commits, commitCount, sizeof(Commit *), __cmpCommitsByDateDescending); // Sort Commits
 
+	// obtain list of branches
+	String _branches[20] = {NULL};
+	uint64_t _branchHeads[20] = {0};
+	int _branch_count = listBranches(_branches, _branchHeads);
+
 	uint printedLogCount = 0;
 	for (uint i = 0; i < commitCount && printedLogCount < options.n; i++)
 	{
@@ -785,22 +790,10 @@ int command_log(int argc, constString argv[], bool performActions)
 		else if (!strReplace(NULL, commits[i]->message, options.search, NULL)) // word pattern not found
 			continue;
 
-		printf("\nCommit : hash " _YELB "'%06lx'" _RST " on branch " _YELB "'%s'" _RST, commits[i]->hash, commits[i]->branch);
-
-		String _branches[20] = {NULL};
-		uint64_t _branchHeads[20] = {0};
-		int _count = listBranches(_branches, _branchHeads);
-		for (int j = 0; j < _count; j++)
-		{
+		printf(_REDB "\n*" _RST " Commit " _YELB "'%06lx'" _RST " : on branch " _YELB "'%s'" _RST, commits[i]->hash, commits[i]->branch);
+		for (int j = 0; j < _branch_count; j++)
 			if (_branchHeads[j] == commits[i]->hash)
 				printf(_GRNB " (%s Head)" _RST, _branches[j]);
-			free(_branches[j]);
-		}
-		if (_branches[_count])
-			free(_branches[_count]);
-
-		// if (commits[i]->hash == (getBranchHead(commits[i]->branch) & 0xFFFFFF))
-		// 	printf(_GRN " (%s HEAD)" _RST, commits[i]->branch);
 		if (commits[i]->hash == curRepository->head.hash)
 			printf(" " _REDB "-> HEAD" _RST);
 		printf("\n");
@@ -808,20 +801,41 @@ int command_log(int argc, constString argv[], bool performActions)
 		char datetime[DATETIME_STR_MAX];
 		strftime(datetime, DATETIME_STR_MAX, DEFAULT_DATETIME_FORMAT, localtime(&commits[i]->time));
 		char boldedMsg[STR_MAX];
-		if(!strcmp(options.search, "*"))
+		if (!strcmp(options.search, "*"))
 			strcat_s(boldedMsg, _BOLD, commits[i]->message, _UNBOLD);
 		else
 			strReplace(boldedMsg, commits[i]->message, options.search, boldAndUnderlineText);
 
-		printf("Date and Time : " _BOLD "%s\n" _RST, datetime);
-		printf("Author: " _CYANB "%s <%s>" _RST "\n", commits[i]->username, commits[i]->useremail);
-		printf("Commit Message: " _CYAN "'%s'\n" _RST, boldedMsg);
-		printf(_DIM "[" _BOLD "%u" _UNBOLD _DIM " file(s) commited]\n" _UNBOLD _RST, commits[i]->commitedFiles.len);
+		printf("  Date and Time : " _BOLD "%s\n" _RST, datetime);
+		printf("  Author: " _CYANB "%s <%s>" _RST "\n", commits[i]->username, commits[i]->useremail);
+		printf("  Commit Message: " _CYAN "'%s'\n" _RST, boldedMsg);
+
+		// list tags for this commit
+		Tag *_tags = NULL;
+		uint _tag_count = listTags(&_tags, commits[i]->hash);
+		for (int j = 0; j < _tag_count; j++)
+		{
+			if (j == 0)
+				printf("  Associated Tags: " _MAGNTA _BOLD "%s " _RST, _tags[0].tagname);
+			else
+				printf("/ " _MAGNTA _BOLD "%s " _RST, _tags[j].tagname);
+			if (j == _tag_count - 1)
+				printf("\n");
+		}
+		freeTagStruct(_tags, _tag_count);
+
+		printf("  " _DIM "[" _BOLD "%u" _UNBOLD _DIM " file(s) commited]\n" _UNBOLD _RST, commits[i]->commitedFiles.len);
 
 		printf("\n");
 		printedLogCount++;
-		freeCommitStruct(commits[i]);
 	}
+
+	for (uint i = 0; i < commitCount; i++)
+		freeCommitStruct(commits[i]);
+	
+	for (int j = 0; j <= _branch_count; j++)
+		if (_branches[j])
+			free(_branches[j]);
 
 	if (printedLogCount == 0)
 	{

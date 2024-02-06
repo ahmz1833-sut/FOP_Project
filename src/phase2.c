@@ -161,14 +161,140 @@ int command_tag(int argc, constString argv[], bool performActions)
 			return ERR_NOERR;
 		if (!curRepository)
 			return ERR_NOREPO;
-		
 
+		Tag *buf = NULL;
+		int tags_count = listTags(&buf, 0);
+
+		if (!tags_count)
+			printWarning("There is no tags in your repository!\n");
+
+		for (int i = 0; i < tags_count; i++)
+		{
+			constString arg[] = {"", "show", buf[i].tagname};
+			command_tag(3, arg, true); // show tag
+		}
+
+		freeTagStruct(buf, tags_count);
 		return ERR_NOERR;
 	}
-	else if(argc == 3 && isMatch(argv[2], "show"))
+	else if (argc == 3 && isMatch(argv[1], "show")) // show a tag information
 	{
-		
+		if (!performActions)
+			return ERR_NOERR;
+
+		Tag *tag = getTag(argv[2]);
+		if (!tag)
+		{
+			printError("The Tag with name you entered does not found!\n");
+			return ERR_NOT_EXIST;
+		}
+
+		printf(_REDB "*" _RST " Tag " _MAGNTA _BOLD "'%s'" _RST "\n", tag->tagname);
+		printf("  Commit " _YELB "'%06lx'" _RST "\n", tag->commitHash);
+		char datetime[DATETIME_STR_MAX];
+		strftime(datetime, DATETIME_STR_MAX, DEFAULT_DATETIME_FORMAT, localtime(&tag->tagTime));
+		printf("  Date and Time : " _BOLD "%s\n" _RST, datetime);
+		printf("  Author: " _CYANB "%s <%s>" _RST "\n", tag->authorName, tag->authorEmail);
+		if (strcmp(tag->message, "(null)") != 0)
+			printf("  Message: " _CYANB "'%s'\n" _RST, tag->message);
+		printf("\n"); 
+		freeTagStruct(tag, 1);
+		return ERR_NOERR;
 	}
+	else if (checkAnyArgument("-a")) // add a tag
+	{
+		uint aIdx = checkAnyArgument("-a");
+		uint mIdx = checkAnyArgument("-m");
+		uint cIdx = checkAnyArgument("-c");
+		uint fIdx = checkAnyArgument("-f");
+
+		if (argc < aIdx + 1 || argc < mIdx + 1 || argc < cIdx + 1)
+			return ERR_ARGS_MISSING;
+
+		argc -= 3; // tag -a <tag>
+		if (mIdx)
+			argc -= 2;
+		if (cIdx)
+			argc -= 2;
+		if (fIdx)
+			argc--;
+
+		if (argc != 0)
+			return ERR_ARGS_MISSING;
+
+		char tagName[100], message[STR_LINE_MAX];
+		uint invalid = strValidate(tagName, argv[aIdx + 1], VALID_CHARS);
+		if (isEmpty(tagName))
+			return ERR_ARGS_MISSING;
+
+		if (mIdx)
+			strValidate(message, argv[mIdx + 1], VALID_CHARS);
+		else
+			strcpy(message, "(null)");
+
+		uint64_t commitHash = curRepository->head.hash; // default : HEAD
+		if (cIdx && (sscanf(argv[cIdx + 1], "%lx", &commitHash) != 1))
+			return ERR_ARGS_MISSING;
+
+		if (!performActions)
+			return ERR_NOERR;
+		if (!curRepository)
+			return ERR_NOREPO;
+
+		Commit *commit = getCommit(commitHash);
+		if (!commit)
+		{
+			printError("Error! Could not find the specified commit.\n");
+			return ERR_NOT_EXIST;
+		}
+		freeCommitStruct(commit);
+
+		Tag *oldTag = getTag(tagName);
+		if (oldTag) // if a tag with this tag-name already exists
+		{
+			freeTagStruct(oldTag, 1);
+			if (!fIdx) // if switch -f is  not provided
+			{
+				printWarning("A tag with this tag name already exist. You can show it using " _BOLD "'neogit tag show %s'" _UNBOLD " command.", tagName);
+				printWarning("Use '-f' to force replacing the new tag.\n");
+				return ERR_ALREADY_EXIST;
+			}
+		}
+
+		time_t tagTime = time(NULL);
+
+		// Check the user.name and user.email
+		String name = getConfig("user.name");
+		String email = getConfig("user.email");
+		if (!name || !email)
+		{
+			printError("You haven't been configured the user information!");
+			printError("Please submit your information and configs for NeoGIT!\n");
+			printWarning("You must first set them by Command(s) below:");
+			if (!name)
+				printWarning(_BOLD "\"" PROGRAM_NAME " config [--global] user.name <yourname>\"" _RST);
+			else
+				free(name);
+			if (!email)
+				printWarning(_BOLD "\"" PROGRAM_NAME " config [--global] user.email <youremail@example.com>\"" _RST);
+			else
+				free(email);
+			return ERR_CONFIG_NOTFOUND;
+		}
+
+		int result = setTag(tagName, message, commitHash, name, email, tagTime);
+		if (result == ERR_NOERR)
+			printf("The tag named " _CYANB "\"%s\"" _RST " has been %s successfully!\n\n", tagName, oldTag ? "updated" : "created");
+		else
+			printError("Error is creating tag \"%s\".\n", tagName);
+		free(name);
+		free(email);
+
+		constString arg[] = {"", "show", tagName};
+		command_tag(3, arg, true); // show tag
+		return result;
+	}
+	return ERR_ARGS_MISSING;
 }
 
 int command_grep(int argc, constString argv[], bool performActions)
@@ -449,6 +575,13 @@ int command_merge(int argc, constString argv[], bool performActions)
 	uint64_t base = getBranchHead(baseBr) & 0xFFFFFF;
 	uint64_t merging = getBranchHead(mergingBr) & 0xFFFFFF;
 
+	// Check if we have deatached  HEAD, then forbid to merge
+	if (curRepository->deatachedHead)
+	{
+		printWarning("Your HEAD is in DEATACHED MODE! You can not merge...");
+		return ERR_DEATACHED_HEAD;
+	}
+
 	// Check if the branches exist
 	Commit *baseHeadCommit = getCommit(base);
 	if (!baseHeadCommit)
@@ -481,13 +614,6 @@ int command_merge(int argc, constString argv[], bool performActions)
 		else
 			free(email);
 		return ERR_CONFIG_NOTFOUND;
-	}
-
-	// Check if we have deatached  HEAD, then forbid to merge
-	if (curRepository->deatachedHead)
-	{
-		printWarning("Your HEAD is in DEATACHED MODE! You can not merge...");
-		return ERR_DEATACHED_HEAD;
 	}
 
 	constString __c_b = curRepository->head.branch;				   // save temporarily current branch name
@@ -602,6 +728,8 @@ int command_merge(int argc, constString argv[], bool performActions)
 __end:
 	systemf("neogit checkout %s >/dev/null", __c_b); // checkout back to tmp saved branch
 	fetchHEAD();									 // fetch head to update program structs
+	free(name);
+	free(email);
 	freeCommitStruct(baseHeadCommit);
 	freeCommitStruct(mergingHeadCommit);
 	freeGitObjectArray(&newObjects);

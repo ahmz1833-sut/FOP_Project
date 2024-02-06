@@ -28,12 +28,17 @@ For launching NeoGIT in your system, you must compile the project into one execu
     ```
     Use command above to init the neogit repository with default branch `master` in your current working directory.
 
+* ### Branches
+	To switch to a different branch, you can use the `neogit checkout` command. This command allows you to switch to a different branch.
+	To list all available branches in a Neogit repository, you can use the `neogit branch` command. This command will display a list of all branches in the repository, along with their current status (e.g. whether they are ahead or behind the current branch).
+
+* ### Commit Logs 
+  * Show commit logs  (`neogit log`)
+  
+  Log command has useful find tools for filtering commits, you can see this options by `neogit log --help`
+
 * ### Help and Syntax of commands
 	You can use `--help` after each command to see  its help message. For example: `neogit status --help`.
-	* ### Switching Between Branches
-        To list all available branches you can run:
-
-
 
 ## Author
 

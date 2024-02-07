@@ -365,7 +365,7 @@ int command_add(int argc, constString argv[], bool performActions)
 				}
 				else
 				{
-					printf(_DIM "No changes : %s\n" _UNBOLD _RST, fileE.path);
+					//printf(_DIM "No changes : %s\n" _UNBOLD _RST, fileE.path);
 				}
 				freeFileEntry(&fileE, 1);
 			}
@@ -486,7 +486,7 @@ int command_reset(int argc, constString argv[], bool performActions)
 				if (res == ERR_NOERR)
 					printf("File removed from stage: " _CYAN "%s\n" _RST, fileE.path);
 				else if (res == ERR_NOT_EXIST)
-					printf(_DIM "Not staged: %s" _UNBOLD _RST "\n", fileE.path);
+					;//printf(_DIM "Not staged: %s" _UNBOLD _RST "\n", fileE.path);
 				else
 					printError("Error! in removing file: " _BOLD "%s" _UNBOLD ".\n", fileE.path);
 				freeFileEntry(&fileE, 1);

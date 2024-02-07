@@ -12,7 +12,7 @@
 
 // #define __DEBUG_MODE__ "neogit", "init"
 // #define __DEBUG_WORKSPACE__ "/"
-#define __NO_MEMLEAK_WARNING__
+// #define __NO_MEMLEAK_WARNING__
 
 // error code variable used in _ERR and try/with/throw
 int _err = 0;

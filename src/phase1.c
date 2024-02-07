@@ -130,11 +130,19 @@ int command_init(int argc, constString argv[], bool performActions)
 		systemf("touch ." PROGRAM_NAME "/tags");
 
 		int err = 0;
-		err |= obtainRepository(curWorkingDir);
-		err |= system("neogit branch master");
-		err |= system("neogit checkout master >/dev/null");
+		err = obtainRepository(curWorkingDir);
+		if(err)
+		{
+			printError("Error while initializing repository. \n");
+			return err;
+		}
+
+		constString arg[] = {"", "master"};
+		err = command_branch(2, arg, true); // create branch master
+		if(err) return err;
+
 		printf("\n");
-		return err;
+		return ERR_NOERR;
 	}
 	return ERR_NOERR;
 }

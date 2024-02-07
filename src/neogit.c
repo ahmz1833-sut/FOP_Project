@@ -46,7 +46,7 @@ int obtainRepository(constString workDir)
 			char cwd[PATH_MAX];
 
 			// If we reach root, or error in navigating to parent, break loop;
-			if (found || isMatch(getcwd(cwd, PATH_MAX), "/") || chdir("..") != 0)
+			if (isMatch(getcwd(cwd, PATH_MAX), "/") || chdir("..") != 0)
 				break;
 		}
 		// Change back to the original working directory (Pop from temp variable)
@@ -526,7 +526,7 @@ int backupStagingArea()
 	for (int i = 0; i < res; i++)
 		if (!buf[i].isDir)
 			withString(dest, strcat_d(tmp, "/", getFileName(buf[i].path)))
-				error += copyFile(buf[i].path, dest, "");
+				error += copyFile(buf[i].path, dest, NULL);
 
 	// Free the memory used by the list of files
 	freeFileEntry(buf, res);
@@ -1355,7 +1355,7 @@ int applyToWorkingDir(GitObjectArray head)
 			case MODIFIED: // We have to update this file at working tree
 				char objAbsPath[PATH_MAX];
 				strcat_s(objAbsPath, curRepository->absPath, "/." PROGRAM_NAME "/objects/", sf->hashStr);
-				copyFile(objAbsPath, absPath, ""); // REPLACE THE FILE IN WORKING TREE WITH HEAD ONE !!
+				copyFile(objAbsPath, absPath, NULL); // REPLACE THE FILE IN WORKING TREE WITH HEAD ONE !!
 				struct utimbuf newTime;
 				newTime.actime = time(NULL);		  // Access time set to now
 				newTime.modtime = sf->file.dateModif; // Modification time is set to the original timestamp

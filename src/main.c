@@ -10,12 +10,12 @@
 #include "phase1.h"
 #include "phase2.h"
 
-// #define __DEBUG_MODE__ "neogit", "revert", "-n", "HEAD"
+// #define __DEBUG_MODE__ "neogit", "init"
+// #define __DEBUG_WORKSPACE__ "/"
+#define __NO_MEMLEAK_WARNING__
 
 // error code variable used in _ERR and try/with/throw
 int _err = 0;
-
-void foo(void) { _exit(0); }
 
 // Array of main commands
 const Command cmds[] = {
@@ -47,12 +47,13 @@ const Command cmds[] = {
  */
 void Welcome();
 
+// Terminate program execution with code 0
+void _terminate_(void) { _exit(0); }
+
+// Main function declaration
 #ifdef __DEBUG_MODE__
 int main()
 {
-	// constString argv[20];
-	// uint argc = tokenizeString(strDup(__DEBUG_MODE__), " ", (String *)argv);
-
 	constString argv[] = {__DEBUG_MODE__};
 	int argc = sizeof(argv) / sizeof(argv[0]);
 #else
@@ -60,7 +61,13 @@ int main(int argc, constString argv[])
 {
 #endif
 
-	atexit(foo);
+#ifdef __NO_MEMLEAK_WARNING__
+	atexit(_terminate_);
+#endif
+
+#ifdef __DEBUG_WORKSPACE__
+	chdir(__DEBUG_WORKSPACE__);
+#endif
 
 	// Fetch the current working directory and find the repo in parents if found
 	// Put these into global variables in Global variables in neogit.c

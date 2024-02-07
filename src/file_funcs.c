@@ -241,8 +241,16 @@ int copyFile(constString _src, constString _dest, constString repo)
 {
 	// Construct full source and destination paths.
 	char src[PATH_MAX], dest[PATH_MAX];
-	strcat_s(src, repo, "/", _src);
-	strcat_s(dest, repo, "/", _dest);
+	if (repo)
+	{
+		strcat_s(src, repo, "/", _src);
+		strcat_s(dest, repo, "/", _dest);
+	}
+	else
+	{
+		strcpy(src, _src);
+		strcpy(dest, _dest);
+	}
 
 	// Ensure the destination directory exists.
 	char dir[PATH_MAX];
@@ -296,29 +304,40 @@ String normalizePath(constString _path, constString _repoPath)
 			strcat(buf, "/");
 			strcat(buf, _path);
 		}
+
+		// remove extra trailing '/'
+		while ((strlen(buf) > 1) && buf[strlen(buf) - 1] == '/')
+			buf[strlen(buf) - 1] = '\0';
 	}
-	while (buf[strlen(buf) - 1] == '/')
-		buf[strlen(buf) - 1] = '\0';
 	absolutePath = buf;
 
 	// Adjust the absolute path based on the repository path if provided.
 	if (_repoPath != NULL && strlen(_repoPath) > 1)
 	{
 		strcpy(repoPath, _repoPath);
+
+		// remove any trailing '/' from repoPath
 		while (repoPath[strlen(repoPath) - 1] == '/')
 			repoPath[strlen(repoPath) - 1] = '\0';
-		strcat(repoPath, "/");
-		strcat(buf, "/");
+		strcat(repoPath, "/"); // add one trailing '/' to end of repoPath
+
+		// remove any trailing '/' from path
+		while (buf[strlen(buf) - 1] == '/')
+			buf[strlen(buf) - 1] = '\0';
+		strcat(buf, "/"); // add one trailing '/' to end of path
 
 		// Check if the path is same with the repository path
 		if (!strcmp(buf, repoPath))
 			return strDup(".");
+		
 		// Check if the path is under the repository or not
 		if (strstr(buf, repoPath) == NULL)
 			return NULL;
+		
 		// Make the path relative to the repository.
 		absolutePath += strlen(repoPath);
 
+		// remove any trailing '/' from result
 		while (absolutePath[strlen(absolutePath) - 1] == '/')
 			absolutePath[strlen(absolutePath) - 1] = '\0';
 
@@ -391,7 +410,7 @@ int __file_entry_sort_comparator(const void *a, const void *b)
 int ls(FileEntry **buf, constString _path)
 {
 	// Normalize the path and check if it's a valid path
-	tryWithString(path, normalizePath(_path, ""), ({ return -1; }), __retTry)
+	tryWithString(path, normalizePath(_path, NULL), ({ return -1; }), __retTry)
 	{
 		// Check if Path not exist
 		if (access(path, F_OK) != 0)

@@ -146,7 +146,7 @@ time_t _loadconfig(constString key, String valueDest, bool global)
 
 			// Create a wildcard pattern to match the key in the configuration file
 			String configWildcard = strcat_d("[", key, "]:*:*");
-
+			
 			// Read and parse the configuration file to find the specified key
 			char buf[STR_LINE_MAX];
 			uint lineNum;

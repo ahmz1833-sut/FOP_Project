@@ -10,7 +10,7 @@
 
 #include "neogit.h"
 
-#define PROGRAM_PATH "/usr/bin/" PROGRAM_NAME
+#define PROGRAM_PATH "/usr/local/bin/" PROGRAM_NAME
 #define INSTALL_NEOGIT(src) __install_neogit_linux(src)
 #define REMOVE_NEOGIT() __remove_neogit_linux()
 int __install_neogit_linux(const char *source);
